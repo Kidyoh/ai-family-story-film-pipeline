@@ -69,7 +69,12 @@ def run(storyboard: dict, args, only) -> None:
         # Each line names its own voice, so a second narrator is a storyboard
         # edit rather than a code change.
         voice = storyboard["voices"][script.get("voice", "narrator")]
-        model = voice.get("model") or "gemini-2.5-flash-preview-tts"
+        # A Gemini key speaks directly; without one, the same voices are
+        # reached through OpenRouter.
+        via_openrouter = (mode == "real" and not common.secrets_present()["GEMINI_API_KEY"]
+                          and providers.openrouter_key_present())
+        model = voice.get("model") or (providers.OPENROUTER_TTS_MODEL if via_openrouter
+                                       else "gemini-2.5-flash-preview-tts")
         key = common.artifact_key("narration", shot["id"], script["text"], voice["voice_id"],
                                   voice["instruction"], model, mode)
 
@@ -91,11 +96,12 @@ def run(storyboard: dict, args, only) -> None:
                 # The free tier caps TTS at ten requests a day per model, and
                 # overloads show up as finishReason OTHER. Pace the requests so a
                 # partial build resumes where it stopped instead of burning quota.
-                wait = PACE_S - (time.monotonic() - last_call)
+                wait = (2.0 if via_openrouter else PACE_S) - (time.monotonic() - last_call)
                 if wait > 0:
                     time.sleep(wait)
                 last_call = time.monotonic()
-                raw, cost = providers.gemini_speech(
+                speak = providers.openrouter_speech if via_openrouter else providers.gemini_speech
+                raw, cost = speak(
                     text=script["text"], voice_id=voice["voice_id"],
                     instruction=voice["instruction"], model=model,
                     language=storyboard["meta"].get("language", "am"),
@@ -108,7 +114,8 @@ def run(storyboard: dict, args, only) -> None:
                     raw_path.unlink(missing_ok=True)
             duration = wav_duration(target)
             common.mark_fresh(target, key)
-            common.log_run(stage="narration", operation="tts", provider=mode, model=model,
+            common.log_run(stage="narration", operation="tts",
+                           provider="openrouter" if via_openrouter else mode, model=model,
                            status="ok", cached=False, shot_id=shot["id"], seconds=duration,
                            voice=voice["voice_id"], cost_usd_estimate=round(cost, 4))
 

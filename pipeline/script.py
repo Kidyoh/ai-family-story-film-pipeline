@@ -28,6 +28,11 @@ def build_prompt(storyboard: dict, shot: dict) -> str:
     characters = {c["id"]: c for c in storyboard["characters"]}
     for character_id in shot["keyframe"].get("characters", []):
         pieces.append(f"the person is {characters[character_id]['description']}")
+    # A character sheet fixes one outfit and one pose. The note is where a shot
+    # says what is different here, after the description so that it wins.
+    note = shot["keyframe"].get("note")
+    if note:
+        pieces.append(f"in this shot, {note.strip()}")
     palette = storyboard["style"].get("palette", {}).get(f"scene_{shot['scene'].lower()}")
     if palette:
         pieces.append(f"palette: {palette}")

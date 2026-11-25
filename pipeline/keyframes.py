@@ -155,8 +155,13 @@ def generate(storyboard: dict, *, prompt: str, target: Path, seed: int, referenc
     # model is paid-only (free-tier quota is zero), so a key alone cannot paint
     # a frame. Gemini remains the fallback when there is no Cloudflare token.
     common.load_env()
-    use_gemini = not common.secrets_present()["CLOUDFLARE_API_TOKEN"]
-    if use_gemini:
+    secrets = common.secrets_present()
+    if not secrets["CLOUDFLARE_API_TOKEN"] and not secrets["GEMINI_API_KEY"] and providers.openrouter_key_present():
+        raw, cost = providers.openrouter_image(prompt=prompt, negative=negative,
+                                               reference=reference, sheets=sheets)
+        model = os.environ.get("OPENROUTER_IMAGE_MODEL") or providers.OPENROUTER_IMAGE_MODEL
+        provider_name = "openrouter"
+    elif not secrets["CLOUDFLARE_API_TOKEN"]:
         # Gemini takes one reference here: the photograph if there is one,
         # otherwise the character's painted sheet.
         sheet = sheets[0] if sheets and reference is None else None
@@ -175,7 +180,9 @@ def generate(storyboard: dict, *, prompt: str, target: Path, seed: int, referenc
         provider_name = "cloudflare"
 
     suffix = ".jpg" if raw[:3] == b"\xff\xd8\xff" else ".png"
-    staged = target.with_suffix(suffix)
+    # Never the target's own name: a PNG reply would make ffmpeg read and
+    # write the same file.
+    staged = target.with_name(target.stem + ".staged" + suffix)
     staged.write_bytes(raw)
     common.ff("-i", staged, "-vf", f"scale={FRAME[0]}:{FRAME[1]}:force_original_aspect_ratio=increase,"
                                    f"crop={FRAME[0]}:{FRAME[1]}", "-frames:v", "1", target)

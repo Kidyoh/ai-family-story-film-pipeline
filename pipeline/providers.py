@@ -195,8 +195,8 @@ def _cloudflare_creds() -> tuple[str, str]:
     return token, account
 
 
-def _reference_tile(reference: Path, *, fit: bool = False) -> bytes:
-    """A reference image as a 512px JPEG tile.
+def _reference_tile(reference: Path, *, fit: bool = False, size: int = 512) -> bytes:
+    """A reference image as a JPEG tile, 512px unless the model takes more.
 
     FLUX.2 edits from reference images rather than copying them, and it caps
     each input at 512px, so only a face-sized tile ever leaves this machine.
@@ -208,8 +208,8 @@ def _reference_tile(reference: Path, *, fit: bool = False) -> bytes:
     instead of cropping the head off.
     """
     tile = common.out_path("tmp", f"reference_{reference.stem}.jpg")
-    scale = ("scale=512:512:force_original_aspect_ratio=decrease:force_divisible_by=2" if fit
-             else "scale=512:512:force_original_aspect_ratio=increase,crop=512:512")
+    scale = (f"scale={size}:{size}:force_original_aspect_ratio=decrease:force_divisible_by=2" if fit
+             else f"scale={size}:{size}:force_original_aspect_ratio=increase,crop={size}:{size}")
     common.ff("-i", reference, "-vf", scale,
               "-frames:v", "1", "-q:v", "3", tile)
     try:
@@ -497,6 +497,10 @@ OPENROUTER_VIDEO_MODEL = "google/veo-3.1-lite"
 OPENROUTER_MUSIC_MODEL = "google/lyria-3-clip-preview"
 OPENROUTER_MUSIC_PRICE = 0.04   # per clip of up to 30 s, from the model page
 OPENROUTER_MUSIC_MAX_S = 30.0
+OPENROUTER_TTS_MODEL = "google/gemini-2.5-flash-tts"
+OPENROUTER_TTS_PRICE = 0.005    # per line; a generous estimate, lines are seconds long
+OPENROUTER_IMAGE_MODEL = "google/gemini-2.5-flash-image"
+OPENROUTER_IMAGE_PRICE = 0.04   # per image; the real cost is read from the reply
 OPENROUTER_DEFAULT_BUDGET = 2.00
 _OPENROUTER_VIDEO: dict[str, dict] = {}
 
@@ -574,6 +578,11 @@ def openrouter_video(*, image: bytes, motion: str, seconds: float, seed: int,
     # the longest, and the conform step slows it to fit.
     offered = sorted(d for d in (info.get("supported_durations") or []) if d and d > 0) or [int(round(seconds))]
     duration = next((d for d in offered if d >= seconds - 0.05), offered[-1])
+    # OPENROUTER_VIDEO_MAX_SECONDS trades a little slow motion for money: a
+    # shorter clip is bought and the conform step stretches it to the shot.
+    ceiling = float(os.environ.get("OPENROUTER_VIDEO_MAX_SECONDS", "") or 0)
+    if ceiling and duration > ceiling:
+        duration = max([d for d in offered if d <= ceiling] or [offered[0]])
     estimate = _video_price_per_second(info, resolution) * duration
     _openrouter_reserve(estimate, f"video {duration}s")
 
@@ -684,6 +693,79 @@ def openrouter_music(*, prompt: str, seconds: float, seed: int) -> tuple[bytes, 
             handle.writeframes(raw)
         raw = buffer.getvalue()
     return raw, OPENROUTER_MUSIC_PRICE
+
+
+def openrouter_speech(*, text: str, voice_id: str, instruction: str, language: str = "am",
+                      model: str | None = None) -> tuple[bytes, float]:
+    """Gemini text-to-speech through OpenRouter's speech endpoint: 24 kHz mono WAV."""
+    common.load_env()
+    model = model or os.environ.get("OPENROUTER_TTS_MODEL", "").strip() or OPENROUTER_TTS_MODEL
+    _openrouter_reserve(OPENROUTER_TTS_PRICE, "narration line")
+    spoken = LANGUAGE_NAMES.get(language, language)
+    payload = {
+        "model": model,
+        "input": text,
+        "voice": voice_id,
+        "instructions": f"Read this {spoken} line exactly as written, in {spoken}. Do not translate it "
+                        f"or add words. Style: {instruction}",
+        "response_format": "wav",
+    }
+
+    def call() -> bytes:
+        response = _hf_check(requests.post(f"{OPENROUTER}/audio/speech", headers=_openrouter_headers(),
+                                           json=payload, timeout=180), "openrouter speech")
+        if len(response.content) < 2048:
+            raise ProviderError(f"openrouter speech returned {len(response.content)} bytes")
+        return response.content
+
+    raw = with_retries(call, attempts=3, base_delay=5.0, label=f"tts {voice_id}")
+    return (raw if raw[:4] == b"RIFF" else pcm_to_wav(raw, "audio/L16;rate=24000")), OPENROUTER_TTS_PRICE
+
+
+def openrouter_image(*, prompt: str, negative: str, reference: Path | None = None,
+                     sheets: list[Path] | None = None, model: str | None = None) -> tuple[bytes, float]:
+    """Keyframe painting through OpenRouter (Gemini image), with image references.
+
+    The photograph, if any, is sent as a centre-cropped tile and the painted
+    character sheets whole, the same rule as the FLUX path.
+    """
+    common.load_env()
+    model = model or os.environ.get("OPENROUTER_IMAGE_MODEL", "").strip() or OPENROUTER_IMAGE_MODEL
+    _openrouter_reserve(OPENROUTER_IMAGE_PRICE, "keyframe")
+    tiles = [_reference_tile(reference, size=1024)] if reference is not None else []
+    tiles += [_reference_tile(sheet, fit=True, size=1024) for sheet in (sheets or [])]
+    lead = ""
+    if reference is not None:
+        lead += ("The first image is a photograph used only as a likeness reference: keep the person's "
+                 "face structure, brow and nose, and never reproduce the photograph itself. ")
+    if sheets:
+        lead += ("The painted character sheet shows who is in the scene: paint the same person, with the "
+                 "same face, hair, skin tone and clothing. Do not copy the sheet's pose or plain background. ")
+    text = (f"{lead}Paint one vertical 9:16 illustration. The painting fills the whole frame edge to "
+            f"edge: no border, no margin, no paper edge, no frame, no text.\n\nScene: {prompt}\n\n"
+            f"Avoid: {negative}")
+    content: list[dict] = [{"type": "text", "text": text}]
+    for tile in tiles[:4]:
+        content.append({"type": "image_url", "image_url": {
+            "url": "data:image/jpeg;base64," + base64.b64encode(tile).decode("ascii")}})
+    payload = {"model": model, "messages": [{"role": "user", "content": content}],
+               "modalities": ["image", "text"], "image_config": {"aspect_ratio": "9:16"}}
+
+    def call() -> tuple[bytes, float]:
+        body = _hf_check(requests.post(f"{OPENROUTER}/chat/completions", headers=_openrouter_headers(),
+                                       json=payload, timeout=300), "openrouter image").json()
+        if body.get("error"):
+            raise ProviderError(f"openrouter image: {json.dumps(body['error'])[:300]}")
+        message = ((body.get("choices") or [{}])[0].get("message") or {})
+        images = message.get("images") or []
+        if not images:
+            # A refusal or an empty answer still costs a little; say what came back.
+            raise ProviderError(f"openrouter image returned no image: {str(message.get('content'))[:200]}")
+        url = images[0]["image_url"]["url"]
+        cost = (body.get("usage") or {}).get("cost")
+        return base64.b64decode(url.split(",", 1)[1]), float(cost) if cost is not None else OPENROUTER_IMAGE_PRICE
+
+    return with_retries(call, attempts=2, label="keyframe")
 
 
 def video_source() -> str | None:

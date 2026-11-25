@@ -50,7 +50,7 @@ Copy `.env.example` to `.env` (git-ignored) and fill in what you have:
 | `CF_IMAGE_MODEL` | keyframes | which FLUX.2 size to paint with (default `flux-2-klein-4b`) |
 | `CF_VIDEO_MODEL` or `WAN_ENDPOINT` | shots | real image-to-video (optional) |
 | `MUSIC_ENDPOINT` | music | real score generation (optional) |
-| `OPENROUTER_API_KEY`, `OPENROUTER_BUDGET_USD` | shots, music | hosted video and Lyria music through OpenRouter, refused past the budget (default $2) (optional) |
+| `OPENROUTER_API_KEY`, `OPENROUTER_BUDGET_USD` | narration, keyframes, shots, music | hosted video and Lyria music through OpenRouter, plus narration and keyframes when no Gemini or Cloudflare key is set; refused past the budget (default $2) (optional) |
 | `HF_TOKEN` | shots, music, ambience | Wan 2.2 video, Stable Audio score and per-shot ambience through Hugging Face (optional) |
 | `PROVIDER_MODE` | all | `real` / `mock`; empty = real if a key is present |
 

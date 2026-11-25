@@ -62,7 +62,8 @@ def provider_mode() -> str:
     mode = os.environ.get("PROVIDER_MODE", "").strip().lower()
     if mode in {"real", "mock"}:
         return mode
-    return "real" if (os.environ.get("GEMINI_API_KEY") or os.environ.get("CLOUDFLARE_API_TOKEN")) else "mock"
+    keys = ("GEMINI_API_KEY", "CLOUDFLARE_API_TOKEN", "OPENROUTER_API_KEY")
+    return "real" if any(os.environ.get(name) for name in keys) else "mock"
 
 
 def secrets_present() -> dict[str, bool]:
@@ -243,7 +244,8 @@ def with_retries(fn, *, attempts: int = 3, base_delay: float = 2.0, label: str =
     for attempt in range(1, attempts + 1):
         try:
             return fn()
-        except (requests.HTTPError, requests.Timeout, requests.ConnectionError, ProviderError) as exc:
+        except (requests.HTTPError, requests.Timeout, requests.ConnectionError,
+                requests.exceptions.ChunkedEncodingError, ProviderError) as exc:
             last = exc
             status = getattr(getattr(exc, "response", None), "status_code", None)
             if status is not None and 400 <= status < 500 and status != 429:

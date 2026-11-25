@@ -173,7 +173,11 @@
                 "type": "array",
                 "items": { "type": "string" }
               },
-              "use_reference": { "type": "boolean", "default": true }
+              "use_reference": { "type": "boolean", "default": true },
+              "note": {
+                "type": "string",
+                "description": "How the characters differ from their description and reference sheet in this shot: wardrobe, pose, size in frame. Stated after the description so it wins."
+              }
             }
           },
           "narration": {

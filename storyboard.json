@@ -180,7 +180,7 @@
       "keyframe": {
         "prompt": "extreme close-up of a girl's bare feet on a wet stone mountain path, a thorn scratch and a smear of blood on one heel, dew beading on grass at the frame edge, mud on the hem of a white cotton dress, cold grey-blue dawn light",
         "seed": 31006,
-        "characters": ["girl"],
+        "characters": [],
         "use_reference": false
       },
       "narration": {
@@ -225,7 +225,8 @@
       "keyframe": {
         "prompt": "vast Ethiopian highland valley at first light, a tiny girl in a white dress standing at the edge of a switchback road, an old bus far below with a thin plume of diesel smoke, ridges layered in blue fog, pale ochre grass, cold and enormous and quiet",
         "seed": 31008,
-        "characters": ["girl"]
+        "characters": ["girl"],
+        "note": "she no longer has the red shawl, which she left on the path: she wears only the white cotton dress. She is seen from behind and is very small in the frame, a tiny figure dwarfed by the valley, hands at her sides"
       },
       "narration": {
         "voice": "narrator",
@@ -246,7 +247,8 @@
       "keyframe": {
         "prompt": "a girl of thirteen in a rumpled white cotton dress standing still at the edge of a busy Addis Ababa street in warm late-afternoon gold light, tall buildings and crowds of people passing in soft blurred motion around her, minibus taxis, dust in the sunbeams, her bare feet on hot asphalt, awe on her face, warm gold and terracotta",
         "seed": 31009,
-        "characters": ["girl"]
+        "characters": ["girl"],
+        "note": "she no longer has the red shawl: she wears only the rumpled white cotton dress. She is small in the frame among the crowd, seen in three-quarter view looking up at the buildings, arms at her sides, not posing for the viewer"
       },
       "narration": {
         "voice": "narrator",
@@ -267,7 +269,8 @@
       "keyframe": {
         "prompt": "medium close-up of a thirteen-year-old Ethiopian girl in a city street, the first real smile breaking across her face, a tall glass building and blurred passing figures behind her, warm gold afternoon light on her cheek, dust and pollen in the air, white cotton dress with a tibeb border",
         "seed": 31010,
-        "characters": ["girl"]
+        "characters": ["girl"],
+        "note": "she no longer has the red shawl: she wears only the white cotton dress. Head and shoulders only, her hands are not in the frame, she looks slightly past the viewer"
       },
       "narration": {
         "voice": "narrator",
@@ -314,7 +317,7 @@
       "keyframe": {
         "prompt": "close-up of two hands resting together in a lap, an old woman's hand with faded henna and a pale scar across the knuckles held by a younger hand with a thin silver ring, white netela and dark green cloth at the frame edge, honey lamplight, steam drifting through the light",
         "seed": 31012,
-        "characters": ["grandmother"],
+        "characters": [],
         "use_reference": false
       },
       "narration": {
