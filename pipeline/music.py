@@ -17,6 +17,7 @@ Writes: outputs/audio/music/<cue>_candidate_<n>.wav, outputs/audio/score.wav
 from __future__ import annotations
 
 import json
+import os
 import wave
 from array import array
 
@@ -31,7 +32,11 @@ FADE = 1.2  # seconds of fade at each cue boundary
 # Every cue is rendered FADE seconds longer than its window, so its fade-out
 # plays under the next cue's fade-in: a crossfade instead of a dip to silence.
 # The last cue's tail rings out under the first end card.
-RENDERER = "score-v2"
+RENDERER = "score-v3"
+# A generated cue is levelled to this, plus the cue's own gain_db, before the
+# mix: with gain_db -6 the score sits 6 dB under the -18 LUFS narration even
+# before the ducking pulls it further down under speech.
+MUSIC_LUFS = -18.0
 
 ROOT_NOTE = {
     "c": 130.81, "c#": 138.59, "db": 138.59, "d": 146.83, "d#": 155.56, "eb": 155.56,
@@ -55,6 +60,15 @@ def cue_windows(storyboard: dict, timing: dict) -> list[dict]:
         windows.append({"cue": cue, "start": start, "end": end, "duration": round(end - start, 2),
                         "render": round(end - start + FADE, 2)})
     return windows
+
+
+def music_source() -> str:
+    """Which generator a real build would use; part of the cache key, so a
+    synthesised fallback is replaced once a music model is configured."""
+    common.load_env()
+    if os.environ.get("MUSIC_ENDPOINT", "").strip():
+        return "ace-step"
+    return "stable-audio" if providers.hf_token_present() else "none"
 
 
 def synth_cue(target, *, duration: float, bpm: int, key: str, gain_db: float) -> None:
@@ -109,29 +123,46 @@ def run(storyboard: dict, args, only) -> None:
         for index in range(1, candidates + 1):
             target = music_dir / f"{cue['id']}_candidate_{index}.wav"
             key = common.artifact_key("music", cue["id"], cue["caption"], window["render"],
-                                      cue.get("bpm"), cue.get("key"), index, mode, RENDERER)
+                                      cue.get("bpm"), cue.get("key"), index, mode, RENDERER,
+                                      music_source() if mode == "real" else None)
             if common.is_fresh(target, key) and not args.force:
                 print(f"  {cue['id']} #{index}: cached")
                 continue
+            fell_back = False
             print(f"  {cue['id']} #{index}: {window['duration']:.1f}s, {cue.get('key')} at {cue.get('bpm')} bpm")
             if mode == "real":
                 try:
-                    raw, cost = providers.ace_step(
-                        caption=cue["caption"], seconds=window["render"],
-                        bpm=cue.get("bpm", 80), key=cue.get("key", "C minor"), seed=1000 + index,
-                    )
+                    common.load_env()
+                    if os.environ.get("MUSIC_ENDPOINT", "").strip() or not providers.hf_token_present():
+                        used = "ace-step"
+                        raw, cost = providers.ace_step(
+                            caption=cue["caption"], seconds=window["render"],
+                            bpm=cue.get("bpm", 80), key=cue.get("key", "C minor"), seed=1000 + index,
+                        )
+                    else:
+                        # Stable Audio has no tempo or key fields, so they go
+                        # into the words.
+                        used = "stable-audio"
+                        raw, cost = providers.hf_audio(
+                            prompt=f"{cue['caption']}, {cue.get('bpm', 80)} bpm, {cue.get('key', 'C minor')}",
+                            seconds=window["render"], seed=1000 + index,
+                            negative="vocals, singing, speech, low quality, distortion",
+                        )
                     staged = music_dir / f"{cue['id']}_candidate_{index}.raw"
                     staged.write_bytes(raw)
-                    common.ff("-i", staged, "-af", f"afade=t=in:d={FADE},"
+                    level = common.gain_to_loudness(staged, MUSIC_LUFS + cue.get("gain_db", -6))
+                    common.ff("-i", staged, "-af", f"volume={level:.2f}dB,afade=t=in:d={FADE},"
                                                    f"afade=t=out:st={max(0.0, window['render'] - FADE):.3f}:d={FADE}",
                               "-t", window["render"], "-ac", CHANNELS, "-ar", SAMPLE_RATE,
                               "-c:a", "pcm_s16le", target)
                     staged.unlink(missing_ok=True)
-                    common.log_run(stage="music", operation="music", provider="ace-step", model="ace-step",
+                    common.log_run(stage="music", operation="music",
+                                   provider="huggingface" if used == "stable-audio" else "ace-step", model=used,
                                    status="ok", cue_id=cue["id"], candidate=index,
                                    cost_usd_estimate=round(cost, 4))
                 except providers.ProviderError as exc:
                     print(f"    ! {exc}; writing the synthesised fallback instead")
+                    fell_back = True
                     common.log_run(stage="music", operation="music", provider="none", model="none",
                                    status="fallback", cue_id=cue["id"], candidate=index, note=str(exc))
                     synth_cue(target, duration=window["render"], bpm=cue.get("bpm", 80),
@@ -141,7 +172,10 @@ def run(storyboard: dict, args, only) -> None:
                           key=cue.get("key", "C minor"), gain_db=cue.get("gain_db", -6))
                 common.log_run(stage="music", operation="music", provider="mock", model="synth",
                                status="ok", cue_id=cue["id"], candidate=index)
-            common.mark_fresh(target, key)
+            # A fallback written because a configured model failed is not
+            # cached, so the next run tries the model again.
+            if not (fell_back and music_source() != "none"):
+                common.mark_fresh(target, key)
 
     # Assemble the bed: cues are summed onto the timeline, each one's fade-out
     # overlapping the next one's fade-in, so a scene change is a crossfade

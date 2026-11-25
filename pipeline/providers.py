@@ -13,6 +13,7 @@ import base64
 import io
 import json
 import os
+import time
 import wave
 from pathlib import Path
 
@@ -34,6 +35,8 @@ PRICE = {
     "@cf/black-forest-labs/flux-2-klein-9b": 0.0171,  # per 1080x1920 frame
     "gemini-2.5-flash-preview-tts": 0.00002,  # per character of narration
     "wan-i2v": 0.30,  # per 5 s clip, dependent on host
+    "hf-video": 0.08,  # per second of 720p Wan 2.2 on fal via Hugging Face; an estimate, check the bill
+    "hf-audio": 0.05,  # per Stable Audio clip via Hugging Face; an estimate, check the bill
     "ace-step": 0.00,  # self-hosted
 }
 
@@ -334,6 +337,146 @@ def wan_endpoint_video(*, image: bytes, motion: str, seconds: float, seed: int) 
         return response.content
 
     return with_retries(call, attempts=2, label="wan"), PRICE["wan-i2v"]
+
+
+# --------------------------------------------------------------------------
+# Hugging Face Inference Providers (open-weight video and audio models)
+# --------------------------------------------------------------------------
+#
+# One HF_TOKEN reaches open models that Hugging Face routes to a hosting
+# partner. Only the fal-ai partner is spoken here, because it is the one that
+# hosts both models this film uses:
+#
+#   HF_VIDEO_MODEL  Wan-AI/Wan2.2-I2V-A14B            image-to-video, Apache-2.0
+#   HF_AUDIO_MODEL  stabilityai/stable-audio-3-medium text-to-audio, open
+#                   weights under Stability's community licence (gated: accept
+#                   the terms on the model page once)
+#
+# The partner's queue protocol: POST the job, poll its status, GET the result.
+
+HF_ROUTER = "https://router.huggingface.co"
+HF_PROVIDER = "fal-ai"
+HF_VIDEO_MODEL = "Wan-AI/Wan2.2-I2V-A14B"
+HF_AUDIO_MODEL = "stabilityai/stable-audio-3-medium"
+HF_VIDEO_FPS = 16        # Wan's native rate; the host interpolates on top of it
+HF_VIDEO_MAX_FRAMES = 161
+_HF_ROUTES: dict[str, str] = {}
+
+
+def hf_token_present() -> bool:
+    common.load_env()
+    return bool(os.environ.get("HF_TOKEN", "").strip())
+
+
+def _hf_headers() -> dict:
+    common.load_env()
+    token = os.environ.get("HF_TOKEN", "").strip()
+    if not token:
+        raise ProviderError("HF_TOKEN is not set, so no Hugging Face model is available")
+    return {"Authorization": f"Bearer {token}"}
+
+
+def _hf_check(response: requests.Response, what: str) -> requests.Response:
+    if response.status_code >= 400:
+        raise requests.HTTPError(f"{what} -> HTTP {response.status_code}: {response.text[:300]}",
+                                 response=response)
+    return response
+
+
+def _hf_route(model: str) -> str:
+    """The hosting partner's own id for a Hub model, read from the Hub."""
+    if model not in _HF_ROUTES:
+        # Public metadata: looked up without the token, which only ever goes
+        # to the router.
+        response = _hf_check(requests.get(
+            f"https://huggingface.co/api/models/{model}",
+            params={"expand[]": "inferenceProviderMapping"}, timeout=60,
+        ), f"hub lookup {model}")
+        mapping = response.json().get("inferenceProviderMapping") or {}
+        if isinstance(mapping, list):
+            mapping = {entry.get("provider"): entry for entry in mapping}
+        entry = mapping.get(HF_PROVIDER)
+        if not entry or entry.get("status") != "live":
+            raise ProviderError(f"{model} is not served by {HF_PROVIDER} on Hugging Face right now")
+        _HF_ROUTES[model] = entry["providerId"]
+    return _HF_ROUTES[model]
+
+
+def _hf_queue(model: str, payload: dict, *, result_key: str, label: str, timeout_s: int = 900) -> bytes:
+    """Submit one job, wait for it, and return the bytes of its media file."""
+    headers = _hf_headers()
+    base = f"{HF_ROUTER}/{HF_PROVIDER}"
+    query = {"_subdomain": "queue"}
+
+    def submit() -> dict:
+        return _hf_check(requests.post(f"{base}/{_hf_route(model)}", params=query, headers=headers,
+                                       json=payload, timeout=120), label).json()
+
+    # Only the submission is retried. Once a job is accepted it is paid for, so
+    # a slow poll must never submit it a second time.
+    job = with_retries(submit, attempts=3, label=label)
+    request_id = job.get("request_id")
+    if not request_id:
+        raise ProviderError(f"{label}: no request id in the response: {json.dumps(job)[:300]}")
+    # The partner may run the job under a different path from the one posted
+    # to, so the status and result addresses come from its reply.
+    path = requests.utils.urlparse(job.get("response_url") or "").path or f"/{_hf_route(model)}/requests/{request_id}"
+    status, deadline = job.get("status"), time.monotonic() + timeout_s
+    while status != "COMPLETED":
+        if time.monotonic() > deadline:
+            raise ProviderError(f"{label}: still {status} after {timeout_s}s (request {request_id})")
+        time.sleep(4)
+        body = _hf_check(requests.get(f"{base}{path}/status", params=query, headers=headers, timeout=60),
+                         f"{label} status").json()
+        status = body.get("status")
+        if status in {"FAILED", "ERROR", "CANCELLED"}:
+            raise ProviderError(f"{label}: job {status}: {json.dumps(body)[:300]}")
+    result = _hf_check(requests.get(f"{base}{path}", params=query, headers=headers, timeout=120),
+                       f"{label} result").json()
+    url = (result.get(result_key) or {}).get("url")
+    if not url:
+        raise ProviderError(f"{label}: no {result_key} in the result: {json.dumps(result)[:300]}")
+    # The media address is pre-signed; it must not be sent the HF token.
+    return _hf_check(requests.get(url, timeout=600), f"{label} download").content
+
+
+def hf_video(*, image: bytes, motion: str, seconds: float, seed: int, negative: str = "") -> tuple[bytes, float]:
+    """Image-to-video on Wan 2.2 through Hugging Face.
+
+    The clip is requested at the shot's own length (up to about ten seconds),
+    so most shots need no retiming afterwards. 720p is the model's ceiling; the
+    conform step scales it to the 1080x1920 master.
+    """
+    common.load_env()
+    model = os.environ.get("HF_VIDEO_MODEL", "").strip() or HF_VIDEO_MODEL
+    frames = max(17, min(HF_VIDEO_MAX_FRAMES, int(round(seconds * HF_VIDEO_FPS)) + 1))
+    payload = {
+        "image_url": "data:image/png;base64," + base64.b64encode(image).decode("ascii"),
+        "prompt": motion,
+        "negative_prompt": negative,
+        "num_frames": frames,
+        "frames_per_second": HF_VIDEO_FPS,
+        "resolution": "720p",
+        "aspect_ratio": "9:16",
+        "seed": seed,
+    }
+    raw = _hf_queue(model, payload, result_key="video", label="hf video", timeout_s=1200)
+    return raw, PRICE["hf-video"] * frames / HF_VIDEO_FPS
+
+
+def hf_audio(*, prompt: str, seconds: float, seed: int, negative: str = "") -> tuple[bytes, float]:
+    """Text-to-audio on Stable Audio through Hugging Face: music or ambience."""
+    common.load_env()
+    model = os.environ.get("HF_AUDIO_MODEL", "").strip() or HF_AUDIO_MODEL
+    payload = {
+        "prompt": prompt,
+        "negative_prompt": negative,
+        "duration": max(1.0, round(seconds, 2)),
+        "output_format": "wav",
+        "seed": seed,
+    }
+    raw = _hf_queue(model, payload, result_key="audio", label="hf audio", timeout_s=600)
+    return raw, PRICE["hf-audio"]
 
 
 # --------------------------------------------------------------------------

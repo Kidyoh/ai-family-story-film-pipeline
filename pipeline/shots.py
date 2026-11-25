@@ -131,11 +131,19 @@ def conform(source, target, *, duration: float, loop: bool) -> None:
     )
 
 
+# Wan does take a negative prompt. These are the ways a painted still goes wrong
+# when it is animated: the camera lurches, faces melt, the style turns to video.
+VIDEO_NEGATIVE = ("fast motion, camera shake, morphing, warping face, extra limbs, extra fingers, "
+                  "photorealistic, 3d render, text, subtitles, watermark, flicker, jump cut")
+
+
 def try_video(storyboard: dict, shot: dict, keyframe, duration: float, seed: int):
     """One attempt at real image-to-video; returns a temp path or None."""
     common.load_env()
     image = keyframe.read_bytes()
-    motion = shot.get("motion") or shot["keyframe"]["prompt"]
+    # The model sees the picture; the prompt only has to say what moves, and
+    # that it should stay a painting.
+    motion = (shot.get("motion") or shot["keyframe"]["prompt"]) + ", slow and subtle, hand-painted illustration style"
     temp = out_path("clips", f"{shot['id']}.raw.mp4")
     used = None
     try:
@@ -145,6 +153,10 @@ def try_video(storyboard: dict, shot: dict, keyframe, duration: float, seed: int
         elif os.environ.get("WAN_ENDPOINT"):
             raw, cost = providers.wan_endpoint_video(image=image, motion=motion, seconds=duration, seed=seed)
             used = "wan-endpoint"
+        elif providers.hf_token_present():
+            raw, cost = providers.hf_video(image=image, motion=motion, seconds=duration, seed=seed,
+                                           negative=VIDEO_NEGATIVE)
+            used = "huggingface"
         else:
             raise providers.ProviderError("no video endpoint configured")
     except providers.ProviderError as exc:
@@ -193,7 +205,8 @@ def run(storyboard: dict, args, only) -> None:
             shot.get("motion"), mode, RENDERER,
             # Changes when a video endpoint appears, so a fallback still is not
             # kept as "fresh" once real motion becomes available.
-            bool(os.environ.get("CF_VIDEO_MODEL") or os.environ.get("WAN_ENDPOINT")) if shot["mode"] == "wan" else None,
+            bool(os.environ.get("CF_VIDEO_MODEL") or os.environ.get("WAN_ENDPOINT")
+                 or providers.hf_token_present()) if shot["mode"] == "wan" else None,
         )
         if common.is_fresh(target, key) and not args.force:
             print(f"  {shot['id']}: cached")
@@ -225,7 +238,12 @@ def run(storyboard: dict, args, only) -> None:
                 common.log_run(stage="shots", operation="render", provider="local", model="ffmpeg",
                                status="fallback", shot_id=shot["id"], seconds=duration,
                                mode="kenburns", note="no video endpoint; keyframe animated in FFmpeg")
-        common.mark_fresh(target, key)
+        configured = bool(os.environ.get("CF_VIDEO_MODEL") or os.environ.get("WAN_ENDPOINT")
+                          or providers.hf_token_present())
+        # A still rendered because a configured video model failed is not
+        # cached, so the next run tries the model again.
+        if rendered or not (shot["mode"] == "wan" and mode == "real" and configured):
+            common.mark_fresh(target, key)
         print(f"    wrote {rel(target)}")
 
 

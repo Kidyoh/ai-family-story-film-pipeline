@@ -188,13 +188,25 @@ def mix_audio(storyboard: dict) -> None:
         if not path.exists():
             common.die(f"missing {rel(path)}. Run `make narration` and `make music` first.")
 
+    # Ambience is optional: the stage writes the file only when it has
+    # something to put in it. It is ducked by the voice like the score.
+    ambience = out_path("audio", "ambience.wav")
+    inputs = ["-i", score, "-i", voice]
+    bed = "[0:a]aresample=48000,aformat=channel_layouts=stereo[score];"
+    if ambience.exists() and ambience.stat().st_size:
+        inputs += ["-i", ambience]
+        bed = ("[0:a]aresample=48000,aformat=channel_layouts=stereo[music];"
+               "[2:a]aresample=48000,aformat=channel_layouts=stereo[amb];"
+               "[music][amb]amix=inputs=2:duration=longest:normalize=0[score];")
+        print(f"  mix: score + ambience + voice")
+
     common.ff(
-        "-i", score, "-i", voice,
+        *inputs,
         "-filter_complex",
         # The voice is 24 kHz mono and the score 48 kHz stereo: put both on
         # one grid before the compressor keys one off the other.
         f"[1:a]aresample=48000,aformat=channel_layouts=stereo,asplit[voice][key];"
-        f"[0:a]aresample=48000,aformat=channel_layouts=stereo[score];"
+        f"{bed}"
         f"[score][key]sidechaincompress=threshold={duck['threshold']}:ratio={duck['ratio']}"
         f":attack={duck['attack_ms']}:release={duck['release_ms']}:makeup=1[ducked];"
         f"[ducked][voice]amix=inputs=2:duration=longest:normalize=0[premix];"

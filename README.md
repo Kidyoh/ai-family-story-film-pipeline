@@ -13,7 +13,7 @@ images, generated score, generated voice, and an end card that says so.
 
 ```bash
 make setup   # once: .venv with jsonschema, requests, imageio-ffmpeg
-make film    # script -> narration -> keyframes -> shots -> music -> assemble
+make film    # script -> narration -> keyframes -> shots -> music -> ambience -> assemble
 ```
 
 `make film` writes `outputs/vertical.mp4` (1080x1920) and
@@ -50,6 +50,7 @@ Copy `.env.example` to `.env` (git-ignored) and fill in what you have:
 | `CF_IMAGE_MODEL` | keyframes | which FLUX.2 size to paint with (default `flux-2-klein-4b`) |
 | `CF_VIDEO_MODEL` or `WAN_ENDPOINT` | shots | real image-to-video (optional) |
 | `MUSIC_ENDPOINT` | music | real score generation (optional) |
+| `HF_TOKEN` | shots, music, ambience | Wan 2.2 video, Stable Audio score and per-shot ambience through Hugging Face (optional) |
 | `PROVIDER_MODE` | all | `real` / `mock`; empty = real if a key is present |
 
 Every optional capability degrades: no video endpoint means the local moving-still
@@ -75,6 +76,7 @@ lines. A build therefore resumes from cache across days instead of failing.
 | `pipeline/keyframes.py` | storyboard, photo | 12 keyframes, 2 character sheets | FLUX.2 / Gemini image |
 | `pipeline/shots.py` | keyframes, timing | 12 clips | Wan-class i2v (optional) |
 | `pipeline/music.py` | storyboard, timing | 12 candidates, `score.wav` | ACE-Step (optional) |
+| `pipeline/ambience.py` | storyboard, timing | one ambience clip per shot, `ambience.wav` | Stable Audio (optional) |
 | `pipeline/assemble.py` | clips, cards, audio | two MP4s, subtitles | no |
 
 Narration runs before images on purpose: the measured length of each Amharic

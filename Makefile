@@ -1,12 +1,12 @@
 PY ?= .venv/bin/python
 export PYTHONUNBUFFERED := 1
 
-.PHONY: all film mock setup validate script narration keyframes shots music assemble clean outputs
+.PHONY: all film mock setup validate script narration keyframes shots music ambience assemble clean outputs
 
 all: film
 
 ## The one command. From a clean clone: make setup, then make film.
-film: script narration keyframes shots music assemble
+film: script narration keyframes shots music ambience assemble
 
 ## Keyless, deterministic build. No network, no secrets, same file names.
 mock:
@@ -35,6 +35,9 @@ shots:
 
 music:
 	$(PY) -m pipeline.music
+
+ambience:
+	$(PY) -m pipeline.ambience
 
 assemble:
 	$(PY) -m pipeline.assemble

@@ -338,6 +338,34 @@ def wav_duration(path: Path) -> float:
     return probe_duration(path)
 
 
+def integrated_loudness(path: Path) -> float | None:
+    """Integrated loudness in LUFS, or None for silence or an unreadable file."""
+    result = run([ffmpeg(), "-hide_banner", "-nostats", "-i", str(path),
+                  "-af", "ebur128", "-f", "null", "-"])
+    for line in reversed(result.stderr.splitlines()):
+        line = line.strip()
+        if line.startswith("I:") and "LUFS" in line:
+            try:
+                value = float(line.split()[1])
+            except (IndexError, ValueError):
+                return None
+            return value if value > -69 else None
+    return None
+
+
+def gain_to_loudness(path: Path, target_lufs: float) -> float:
+    """dB of plain gain that brings a clip to target_lufs.
+
+    A generated clip arrives at whatever level its model likes. A fixed gain
+    (rather than a compressor) puts it at a known level without touching its
+    dynamics. Clamped, so near-silence is not boosted into noise.
+    """
+    measured = integrated_loudness(path)
+    if measured is None:
+        return 0.0
+    return max(-40.0, min(30.0, target_lufs - measured))
+
+
 # --------------------------------------------------------------------------
 # deterministic mock material
 # --------------------------------------------------------------------------

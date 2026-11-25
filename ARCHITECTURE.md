@@ -116,6 +116,12 @@ Only implemented once each, in `pipeline/providers.py`.
   multipart: `image` file, form fields `prompt`, `seconds`, `seed`, mp4 back.
 - **Music**: `MUSIC_ENDPOINT`, JSON POST `{caption, lyrics, duration, bpm, key,
   seed}`, audio bytes or `{"audio": "<base64>"}` back.
+- **Hugging Face**: `HF_TOKEN` reaches open-weight models through Hugging Face
+  Inference Providers (the fal-ai partner's queue: submit, poll, fetch). It is
+  the third choice for video (Wan 2.2 i2v, requested at the shot's own length),
+  the second for music (Stable Audio, when `MUSIC_ENDPOINT` is empty), and the
+  only source for the ambience layer. Generated music and ambience are levelled
+  to a fixed loudness before the mix, because each model returns its own level.
 
 Video and music are deliberately not hard dependencies: the assignment grades
 the pipeline and the film, and a 3-day build must not be blocked by a GPU queue.
