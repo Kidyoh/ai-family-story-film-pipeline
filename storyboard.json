@@ -1,0 +1,392 @@
+{
+  "version": "1.0",
+  "meta": {
+    "title": "የእሷ እርምጃ",
+    "logline": "A girl walks out of an arranged marriage into the dark highlands, and the step she takes becomes the road her granddaughter stands on.",
+    "language": "am",
+    "subtitle_language": "en",
+    "fps": 24,
+    "aspect_ratios": ["9:16", "16:9"],
+    "audience": "My family first, on a phone: my mother's generation, who knew her, and my cousins born in Addis and abroad who only know her name. Then the cohort and anyone who has a grandmother they wish they had asked more questions about.",
+    "intent": "They should feel that one frightened, barefoot decision is the reason their own life exists where it does, and they should want to go and ask an elder for the story they have not asked for yet.",
+    "consent": {
+      "status": "recorded",
+      "details": "Subject is my late grandmother. Her living children (including my parent) have been asked and have agreed, and the record is in ETHICS.md. Consent covers (a) a stylised painted depiction informed by the one surviving family photograph, (b) the invented first-person words placed in her mouth, and (c) publication to the course and to social platforms with an AI label. Her photograph is a likeness reference only; it is never shown on screen and she is not named in the film or its public posts."
+    }
+  },
+
+  "style": {
+    "block": "hand-painted gouache and ink illustration on coarse paper, visible brushwork and paper grain, painterly realism, Ethiopian highland palette, muted and slightly desaturated, soft natural light, shallow depth of field, fine film grain, no text, no lettering, no watermark",
+    "negative": "photorealistic photograph, 3d render, cgi, plastic skin, extra fingers, deformed hands, text, letters, watermark, logo, oversaturated, neon, modern technology",
+    "palette": {
+      "scene_a": "cold indigo night, charcoal smoke, one amber kerosene glow",
+      "scene_b": "slate-blue pre-dawn fog, wet grey stone, pale ochre ridge",
+      "scene_c": "warm gold afternoon, terracotta, cobalt sky",
+      "scene_d": "honey lamplight, deep green, white cotton, soft shadow"
+    }
+  },
+
+  "characters": [
+    {
+      "id": "girl",
+      "description": "an Ethiopian girl of about thirteen, slender, deep brown skin, large dark almond eyes, short tightly coiled hair, a faded red hand-woven wedding shawl over a white cotton dress with a fine tibeb border, henna patterns on both palms, barefoot",
+      "reference_sheet": "outputs/refs/girl_sheet.png",
+      "source_photo": null,
+      "seed": 1101
+    },
+    {
+      "id": "grandmother",
+      "description": "the same woman at about seventy, deep brown skin, fine lines around the eyes, silver-threaded hair under a white netela, steady kind gaze, faded henna on her palms, a dark green dress with a tibeb border, a small silver cross, structure of face and brow taken from the family photograph",
+      "reference_sheet": "outputs/refs/grandmother_sheet.png",
+      "source_photo": "assets/refs/grandmother_source.png",
+      "seed": 2202
+    }
+  ],
+
+  "voices": {
+    "narrator": {
+      "voice_id": "Kore",
+      "instruction": "an older woman remembering, calm, warm, unhurried, speaking Amharic softly as if to one person close by; let the pauses breathe, never theatrical"
+    }
+  },
+
+  "shots": [
+    {
+      "id": "A1",
+      "scene": "A",
+      "duration_s": 6,
+      "reason": "Establishes where and when in one image, and puts the celebration outside the frame so the audience feels it pressing in on the girl.",
+      "shot_size": "extreme_wide",
+      "camera": "locked wide, static",
+      "mode": "wan",
+      "motion": "thin smoke drifts across the frame, the lamp flame behind the doorway flickers, camera pushes in very slowly toward the lit door",
+      "keyframe": {
+        "prompt": "a small round highland hut of mud and thatch at night, a warm orange strip of lamplight escaping through the crooked door, thin woodsmoke rising into a cold indigo sky, wet grass, distant mountains in silhouette, no people visible, cold indigo night with one amber kerosene glow",
+        "seed": 31001,
+        "characters": [],
+        "use_reference": false
+      },
+      "narration": null,
+      "ambience": "distant wedding ululation, a low kebero drum, fire crackle, wind in grass"
+    },
+    {
+      "id": "A2",
+      "scene": "A",
+      "duration_s": 7,
+      "reason": "Shows her before she is anything but a child: hennaed hands, red shawl, a body that has been dressed for someone else's decision.",
+      "shot_size": "medium",
+      "camera": "eye level, slow push",
+      "mode": "kenburns",
+      "kenburns": { "zoom_from": 1.0, "zoom_to": 1.12, "pan": "in" },
+      "keyframe": {
+        "prompt": "interior of a smoky highland hut at night, a girl of thirteen sits in a corner against the wall, knees drawn up, hennaed palms open on her lap, faded red wedding shawl around her shoulders, headscarf slipping, eyes lowered, one kerosene lamp on the floor throwing amber light and long shadows, cold indigo dark around her",
+        "seed": 31002,
+        "characters": ["girl"]
+      },
+      "narration": {
+        "voice": "narrator",
+        "text": "በዚያች ሌሊት ዕድሜዬ ገና አልቆጠረም ነበር።",
+        "subtitle": "That night, I had not yet counted my years."
+      },
+      "ambience": "muffled drums through a wall, fire crackle, a woman's laugh far off"
+    },
+    {
+      "id": "A3",
+      "scene": "A",
+      "duration_s": 6,
+      "reason": "The emotional centre of the opening: one tear in lamplight turns a dressed-up child into someone who understands what is happening to her.",
+      "shot_size": "close",
+      "camera": "eye level, locked",
+      "mode": "kenburns",
+      "kenburns": { "zoom_from": 1.06, "zoom_to": 1.0, "pan": "out" },
+      "keyframe": {
+        "prompt": "close-up of a thirteen-year-old Ethiopian girl's face lit only by a kerosene lamp, one tear catching the light on her cheek, wet eyelashes, hennaed fingers at the edge of the frame, faded red shawl at her throat, deep indigo shadow behind her",
+        "seed": 31003,
+        "characters": ["girl"]
+      },
+      "narration": {
+        "voice": "narrator",
+        "text": "እጆቼ በእንሶስላ ሲቀሉ፣ ልቤ ግን በፍርሃት ታስሮ ነበር።",
+        "subtitle": "My hands were stained with henna, but my heart was tied in fear."
+      },
+      "ambience": "breath, lamp hiss, drum far away"
+    },
+    {
+      "id": "A4",
+      "scene": "A",
+      "duration_s": 6,
+      "reason": "Names the thing being done to her without showing a face: the elder's shadow on the wall is the whole institution of 'it is your fate'.",
+      "shot_size": "insert",
+      "camera": "low angle on the wall, static",
+      "mode": "kenburns",
+      "kenburns": { "zoom_from": 1.0, "zoom_to": 1.08, "pan": "right" },
+      "keyframe": {
+        "prompt": "interior hut wall at night, the huge distorted shadow of an older man's head and shoulders thrown across the mud wall by a kerosene lamp, a heavy hand reaching toward a folded red wedding shawl on a stool, the girl's small shadow crouched at the edge of the frame, warm amber against cold dark",
+        "seed": 31004,
+        "characters": ["girl"]
+      },
+      "narration": {
+        "voice": "narrator",
+        "text": "ያልመረጥኩትን ሕይወት፣ ያላወቅኩትን ባል... ‹ዕድልሽ ነው› ብለው ሊያሸክሙኝ ድግሱ ደምቋል።",
+        "subtitle": "They had lit the wedding fires to load me with a life I did not choose, a husband I did not know — \"it is your fate,\" they said."
+      },
+      "ambience": "approaching footsteps, drum, ululation rising then cut"
+    },
+    {
+      "id": "B1",
+      "scene": "B",
+      "duration_s": 7,
+      "reason": "The decision as an image rather than a line: a small figure already outside, fog closing over the road behind her.",
+      "shot_size": "wide",
+      "camera": "tracking sideways, low",
+      "mode": "wan",
+      "motion": "fog rolls slowly across the ridge, the edge of her shawl lifts in the wind, camera tracks gently beside her at walking speed",
+      "keyframe": {
+        "prompt": "pre-dawn highland path, a girl of thirteen walking fast barefoot between wet stone walls, heavy fog swallowing the path behind her, her red shawl clutched to her chest, her white dress soaked at the hem, cold slate-blue light, mountains barely visible above the mist",
+        "seed": 31005,
+        "characters": ["girl"]
+      },
+      "narration": {
+        "voice": "narrator",
+        "text": "ግን ደግሞ ከፍርሃቴ ይልቅ የነጻነት ጥማቴ በረታ።",
+        "subtitle": "But a thirst for freedom grew louder than my fear."
+      },
+      "ambience": "wind, wet gravel underfoot, one dog barking far away"
+    },
+    {
+      "id": "B2",
+      "scene": "B",
+      "duration_s": 6,
+      "reason": "The cost of the decision, made physical: this is what running actually feels like, and it keeps the film from romanticising her.",
+      "shot_size": "insert",
+      "camera": "low, close on the ground",
+      "mode": "kenburns",
+      "kenburns": { "zoom_from": 1.0, "zoom_to": 1.15, "pan": "in" },
+      "keyframe": {
+        "prompt": "extreme close-up of a girl's bare feet on a wet stone mountain path, a thorn scratch and a smear of blood on one heel, dew beading on grass at the frame edge, mud on the hem of a white cotton dress, cold grey-blue dawn light",
+        "seed": 31006,
+        "characters": ["girl"]
+      },
+      "narration": {
+        "voice": "narrator",
+        "text": "የታሰረብኝን የባህል ገመድ በጥሼ፣ ጨለማውን ተገን አድርጌ ተነሳሁ።",
+        "subtitle": "I tore the rope of custom that bound me and made the darkness my cloak."
+      },
+      "ambience": "breath, wind, distant cockerel"
+    },
+    {
+      "id": "B3",
+      "scene": "B",
+      "duration_s": 6,
+      "reason": "The shawl is the one object that carries her old life; leaving it on the path is the vow, said without narration.",
+      "shot_size": "close",
+      "camera": "high angle, tilt down",
+      "mode": "kenburns",
+      "kenburns": { "zoom_from": 1.1, "zoom_to": 1.0, "pan": "out" },
+      "keyframe": {
+        "prompt": "a faded red hand-woven wedding shawl lying abandoned on a wet stone path, one corner lifted by the wind, tiny white tibeb embroidery catching the first grey light, fog drifting over it, no people, cold slate-blue dawn",
+        "seed": 31007,
+        "characters": [],
+        "use_reference": false
+      },
+      "narration": {
+        "voice": "narrator",
+        "text": "እሾሁ እግሬን ቢወጋኝም፣ ድንጋዩ ቢያደማኝም...",
+        "subtitle": "The thorn cut my feet, the stone bruised me..."
+      },
+      "ambience": "wind, cloth flapping, a bus engine growing audible"
+    },
+    {
+      "id": "B4",
+      "scene": "B",
+      "duration_s": 7,
+      "reason": "Gives her somewhere to be going and lets the audience feel the distance between the valley she is leaving and the city she cannot see yet.",
+      "shot_size": "extreme_wide",
+      "camera": "locked wide, static",
+      "mode": "wan",
+      "motion": "diesel smoke drifts and thins above the road, fog moves slowly through the valley, the tiny figure does not move, camera holds perfectly still",
+      "keyframe": {
+        "prompt": "vast Ethiopian highland valley at first light, a tiny girl in a white dress standing at the edge of a switchback road, an old bus far below with a thin plume of diesel smoke, ridges layered in blue fog, pale ochre grass, cold and enormous and quiet",
+        "seed": 31008,
+        "characters": ["girl"]
+      },
+      "narration": {
+        "voice": "narrator",
+        "text": "ከኋላዬ ካለው እስር ቤት ይልቅ ከፊቴ ያለው ያልታወቀ መንገድ ናፈቀኝ።",
+        "subtitle": "...but the unknown road ahead drew me more than the prison behind."
+      },
+      "ambience": "wind over open ground, distant engine, one bird"
+    },
+    {
+      "id": "C1",
+      "scene": "C",
+      "duration_s": 8,
+      "reason": "The hard cut from fog to gold is the whole film's turn; it must be a shock of light, and she must be small in it rather than triumphant.",
+      "shot_size": "wide",
+      "camera": "eye level, slow push",
+      "mode": "kenburns",
+      "kenburns": { "zoom_from": 1.0, "zoom_to": 1.1, "pan": "in" },
+      "keyframe": {
+        "prompt": "a girl of thirteen in a rumpled white cotton dress standing still at the edge of a busy Addis Ababa street in warm late-afternoon gold light, tall buildings and crowds of people passing in soft blurred motion around her, minibus taxis, dust in the sunbeams, her bare feet on hot asphalt, awe on her face, warm gold and terracotta",
+        "seed": 31009,
+        "characters": ["girl"]
+      },
+      "narration": {
+        "voice": "narrator",
+        "text": "አዲስ አበባ ስገባ በኪሴ ምንም አልነበረኝም፤",
+        "subtitle": "When I came into Addis Ababa I had nothing in my pocket,"
+      },
+      "ambience": "city traffic, many voices, a horn, a street vendor calling"
+    },
+    {
+      "id": "C2",
+      "scene": "C",
+      "duration_s": 8,
+      "reason": "The one shot where she is allowed to be glad; without it the film is only suffering, and the ending has nothing to land on.",
+      "shot_size": "medium_close",
+      "camera": "eye level, gentle push",
+      "mode": "kenburns",
+      "kenburns": { "zoom_from": 1.0, "zoom_to": 1.08, "pan": "in" },
+      "keyframe": {
+        "prompt": "medium close-up of a thirteen-year-old Ethiopian girl in a city street, the first real smile breaking across her face, a tall glass building and blurred passing figures behind her, warm gold afternoon light on her cheek, dust and pollen in the air, white cotton dress with a tibeb border",
+        "seed": 31010,
+        "characters": ["girl"]
+      },
+      "narration": {
+        "voice": "narrator",
+        "text": "በልቤ ግን የራሴ የሆነ ነገ ብቻ ነበረኝ።",
+        "subtitle": "but in my heart I had a tomorrow that was mine."
+      },
+      "ambience": "city hush under the music, a distant horn"
+    },
+    {
+      "id": "D1",
+      "scene": "D",
+      "duration_s": 7,
+      "reason": "The match cut pays off sixty seconds of waiting: the same face, sixty years later, still here. This is the shot the family will remember.",
+      "shot_size": "medium_close",
+      "camera": "eye level, slow push",
+      "mode": "wan",
+      "motion": "steam rises steadily from the coffee pot in the foreground, her eyes crinkle into a small smile, the lamp flame behind her flickers, camera pushes in very slowly",
+      "keyframe": {
+        "prompt": "an elderly Ethiopian woman of about seventy sitting in a warm room at a coffee ceremony, white netela over silver-threaded hair, dark green dress with a tibeb border, steam rising from a black clay coffee pot, small cups on a tray, honey lamplight, her hands resting in her lap, faded henna on her palms, calm and proud",
+        "seed": 31011,
+        "characters": ["grandmother"]
+      },
+      "narration": {
+        "voice": "narrator",
+        "text": "ያኔ እሷ ባትሮጥ ኖሮ... ዛሬ እኔ መቆም አልችልም ነበር።",
+        "subtitle": "If she had not run that night... I would not be standing here today."
+      },
+      "ambience": "coffee pouring, room tone, a clock"
+    },
+    {
+      "id": "D2",
+      "scene": "D",
+      "duration_s": 8,
+      "reason": "Hands are where this family's memory actually lives, and the pull-back puts the granddaughter in frame so the film ends on the living, not the dead.",
+      "shot_size": "close",
+      "camera": "pull back slowly to medium",
+      "mode": "kenburns",
+      "kenburns": { "zoom_from": 1.15, "zoom_to": 1.0, "pan": "out" },
+      "keyframe": {
+        "prompt": "close-up of two hands resting together in a lap, an old woman's hand with faded henna and a pale scar across the knuckles held by a younger hand with a thin silver ring, white netela and dark green cloth at the frame edge, honey lamplight, steam drifting through the light",
+        "seed": 31012,
+        "characters": ["grandmother"]
+      },
+      "narration": {
+        "voice": "narrator",
+        "text": "የእሷ አንድ እርምጃ፣ የእኔ የሕይወት ጎዳና ሆነ።",
+        "subtitle": "Her one step became the road of my life."
+      },
+      "ambience": "room tone, a single cup set down, then silence"
+    }
+  ],
+
+  "music": {
+    "cues": [
+      {
+        "id": "m1",
+        "from_shot": "A1",
+        "to_shot": "A4",
+        "intent": "Cold, held tension under a celebration the girl is not part of. Almost nothing happens; it should feel like a room she cannot leave.",
+        "caption": "sparse solo krar and a low bowed cello drone, cold and restrained, slow minor pentatonic, a distant frame drum like a heartbeat, empty night air, instrumental, no vocals, no drums fill",
+        "bpm": 68,
+        "key": "C minor",
+        "gain_db": -6,
+        "candidates": 3
+      },
+      {
+        "id": "m2",
+        "from_shot": "B1",
+        "to_shot": "B4",
+        "intent": "Forward motion and fear at once. A single repeating figure that will not resolve until the city arrives.",
+        "caption": "urgent minimalist score, repeating krar ostinato, breath-like bowed strings, wind texture, rising pulse, driving but not loud, instrumental, no vocals",
+        "bpm": 96,
+        "key": "D minor",
+        "gain_db": -6,
+        "candidates": 3
+      },
+      {
+        "id": "m3",
+        "from_shot": "C1",
+        "to_shot": "C2",
+        "intent": "The release: warmth, air and a major key after fifty seconds of cold. This is where the audience exhales.",
+        "caption": "warm golden orchestral swell, major key, soft strings and a single Ethiopian flute line, gentle cymbal shimmer, hopeful arrival, spacious, instrumental, no vocals",
+        "bpm": 84,
+        "key": "F major",
+        "gain_db": -5,
+        "candidates": 3
+      },
+      {
+        "id": "m4",
+        "from_shot": "D1",
+        "to_shot": "D2",
+        "intent": "The theme from the opening returns, warm now, then thins to one plucked note so the last line lands in near-silence.",
+        "caption": "tender solo krar theme returning slowly, warm strings underneath, unhurried, resolving, thinning to a single plucked note, intimate, instrumental, no vocals",
+        "bpm": 60,
+        "key": "F major",
+        "gain_db": -7,
+        "candidates": 3
+      }
+    ],
+    "ducking": {
+      "threshold": 0.02,
+      "ratio": 6,
+      "attack_ms": 300,
+      "release_ms": 1500
+    },
+    "loudness": {
+      "target_lufs": -14,
+      "true_peak_db": -1
+    }
+  },
+
+  "end_cards": [
+    {
+      "id": "dedication",
+      "duration_s": 4,
+      "background": "black",
+      "lines": [
+        "ለአያቴ...",
+        "እና ዕድላቸውን ለራሳቸው ለጻፉ ሴቶች ሁሉ።",
+        "For my grandmother — and for every woman who wrote her own fate."
+      ]
+    },
+    {
+      "id": "ai_disclosure",
+      "duration_s": 4,
+      "background": "black",
+      "lines": [
+        "This film was made with AI.",
+        "Images, music and narration were generated.",
+        "ይህ ፊልም በAI ቴክኖሎጂ የተሰራ ነው።"
+      ]
+    }
+  ],
+
+  "exports": [
+    { "name": "vertical", "aspect": "9:16", "width": 1080, "height": 1920 },
+    { "name": "horizontal", "aspect": "16:9", "width": 1920, "height": 1080 }
+  ]
+}

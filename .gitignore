@@ -1,0 +1,22 @@
+# secrets — never commit these
+.env
+.env.*
+!.env.example
+
+# local toolchain
+.venv/
+.tools/
+__pycache__/
+*.pyc
+
+# generated media and derived plans: rebuildable from storyboard.json
+# (runs.jsonl is committed: the log is evidence, the artifacts are not)
+outputs/
+
+# the family photograph stays on the machine it was scanned on; the pipeline
+# does not need it to build (see assets/refs/README.md)
+assets/refs/*.png
+assets/refs/*.jpg
+assets/refs/*.jpeg
+assets/refs/*.heic
+!assets/refs/README.md

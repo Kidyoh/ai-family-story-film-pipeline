@@ -1,0 +1,172 @@
+# Experiments
+
+Ten decisions that were tested rather than assumed. Each one lists what was
+measured, and what the pipeline does because of it. Commands are the ones that
+actually ran; numbers come from this machine (Ubuntu 24.04, Python 3.12, FFmpeg
+9.0.2 via imageio-ffmpeg).
+
+## 1. Is a strict schema worth it?
+
+**Hypothesis:** `additionalProperties: false` everywhere plus required fields will
+catch the mistakes that actually cost money, before a model call.
+
+**Test:** three mutations of the valid storyboard, validated directly.
+
+```
+delete shots[0].reason   -> 1 error: 'reason' is a required property
+shots[0].duration_s = 99 -> 1 error: 99 is greater than the maximum of 12
+storyboard.extra = 1     -> 1 error: Additional properties are not allowed
+```
+
+**Result:** all three caught, exit code 1, before any work. Two more mutations -
+an unknown character id and a music cue pointing at a renamed shot - are caught
+by semantic checks in `load_storyboard`, which the schema cannot express.
+
+**Decision:** validation runs in `stage_cli`, so no stage can bypass it, including
+with `--force`.
+
+## 2. Can a consent rule live in code instead of in a paragraph?
+
+**Hypothesis:** if consent is only written in `ETHICS.md`, a tired 2 a.m. build
+will ignore it.
+
+**Test:** set `meta.consent.status = "pending"` and call `require_consent`.
+
+```
+error: keyframes: refusing to run. meta.consent.status is 'pending' ...
+exit 1
+```
+
+**Result:** every stage refuses, including the ones that only read the file.
+
+**Decision:** the gate lives in `stage_cli`, not in one stage, and `ETHICS.md`
+describes the same rule in human language.
+
+## 3. Amharic text: drawtext or libass?
+
+**Hypothesis:** Amharic end cards need Ge'ez shaping, which a plain font call
+does not guarantee.
+
+**Test:** rendered the AI-disclosure card through libass (`ass=...`) with Noto
+Sans Ethiopic, extracted a frame at 86.5 s, and looked at it.
+
+**Result:** `ይህ ፊልም በAI ቴክኖሎጂ የተሰራ ነው።` shaped correctly, with the fidel joined
+and the right margin even. The static FFmpeg build in `.tools/` also turned out
+to have no `drawtext` at all (no freetype), which settled the argument.
+
+**Decision:** all on-screen text - subtitles, cards - is rendered as ASS through
+libass. `mock_image` checks `has_filter("drawtext")` and skips its label rather
+than crashing.
+
+## 4. Voice first or picture first?
+
+**Hypothesis:** Amharic line length is unpredictable enough that dubbing to a
+locked picture would force either rushed speech or overlong shots.
+
+**Test:** laid out the timeline with `duration = max(contract, speech + 0.5 + 0.8)`
+for all 11 narrated shots and summed it.
+
+**Result:** 90.5 s - half a second over the brief's ceiling, from pads alone.
+
+**Decision:** narration runs before images, and `narration.py` trims slack from
+shots that have it (last first, never below the speech) until the film fits. The
+first full mock build reported 90.0 s with one 0.2 s trim on D2. The speech rate
+guess in `script.py` (2.2 words/s) is only used for planning warnings; the edit
+uses whatever audio the stage actually produced.
+
+## 5. Ken Burns without judder
+
+**Hypothesis:** `zoompan` on a 1080x1920 still steps by whole pixels and visibly
+jitters on a slow push.
+
+**Test:** rendered a pan and a push two ways - directly on the 1080-wide frame,
+and from a 2160x3840 upscale with the output crop taken from that.
+
+**Result:** the direct version judders at 1.0 -> 1.08 over seven seconds; the
+upscaled version is smooth because the motion is expressed in sub-pixel steps of
+the larger frame.
+
+**Decision:** every Ken Burns shot is rendered from a 2x frame. Cost: about 3.5 s
+per shot at `veryfast`, 56 s for all twelve clips.
+
+## 6. Does two-pass loudness survive a duck?
+
+**Hypothesis:** one-pass `loudnorm` would pump the music back up in the gaps,
+undoing the sidechain.
+
+**Test:** mixed score and voice through `sidechaincompress`, normalised in two
+passes (measure, then apply linearly), then measured the result.
+
+```
+mix: -14.00 LUFS, true peak -4.84 dBTP
+```
+
+**Result:** target hit exactly, peaks well under the -1 dBTP ceiling, and the
+ducking curve is intact because the gain is linear, not dynamic.
+
+**Decision:** `assemble.py` always measures before it normalises, and prints the
+post-export measurement so the claim is checkable from the log.
+
+## 7. Ducking parameters belong in the contract
+
+**Hypothesis:** mix parameters tuned in code get re-guessed in every session.
+
+**Test:** the contract carries `threshold 0.02, ratio 6, attack 300 ms, release
+1500 ms`, and `assemble.py` reads them straight into the filter string.
+
+**Result:** re-tuning means editing JSON and re-running `make assemble` - about
+three minutes, no model calls, no code change.
+
+**Decision:** nothing about the mix is hard-coded; same for loudness targets and
+for cue gains.
+
+## 8. Is the mock mode actually deterministic?
+
+**Hypothesis:** without byte-identical output, mock mode is useless for diffing
+and for CI.
+
+**Test:** generated `outputs/keyframes/A1.png`, re-ran with `--force`, compared
+hashes.
+
+```
+3aff4050be5356b88cbda546a0891e3b8b26d966280d2eb288355730bda562aa  A1.png
+3aff4050be5356b88cbda546a0891e3b8b26d966280d2eb288355730bda562aa  A1.png
+```
+
+**Result:** identical. Gradients are seeded, grain is FFmpeg's temporal noise but
+rendered from a fixed frame count, and nothing depends on the clock.
+
+**Decision:** `make mock` is the reference build: a clean clone can be verified
+without a single key.
+
+## 9. How wide is a cache invalidation?
+
+**Hypothesis:** a good key means editing one line re-renders one line, not the
+film.
+
+**Test:** re-ran `pipeline.keyframes` unchanged, then edited A1's prompt in
+`storyboard.json` and re-ran with `--dry-run --only A1,A2,B3`.
+
+**Result:** unchanged run: 12/12 cached, 0.0 s, 0 model calls. After the edit:
+`A1: would generate`, `A2: cached`, `B3: cached` - one prompt invalidates one
+keyframe (and the clip that hashes it), and nothing else.
+
+**Decision:** keys are semantic (prompt, seed, reference hash, duration) and each
+artifact carries its key in a sidecar `.key` file, so the cache is inspectable
+with `cat`.
+
+## 10. Two exports, how much do they really cost?
+
+**Hypothesis:** composing 12 shots twice is the honest way to get a real 16:9
+cut, and maybe it is cheap enough to justify.
+
+**Test:** counted the work: 12 extra keyframes, 4 extra video generations, a
+second edit decision list, and a second set of subtitle positions.
+
+**Result:** roughly double the image and video spend and a second art-direction
+pass, for a derivative of a film designed for a phone. The 16:9 export from the
+vertical master costs one FFmpeg pass (about 60 s) and 26 MB.
+
+**Decision:** one master, two exports, with the horizontal frame built from a
+blurred extension of the vertical. The compromise is visible, and `DESIGN.md`
+says so instead of hiding it.

@@ -1,0 +1,298 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/loza/ai-family-story-film-pipeline/schema/storyboard.schema.json",
+  "title": "Heritage Short Storyboard",
+  "description": "The single contract between every pipeline stage. Stage scripts read this file and write their outputs; no stage may hold creative decisions of its own.",
+  "type": "object",
+  "required": ["version", "meta", "style", "characters", "voices", "shots", "music", "end_cards", "exports"],
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+$"
+    },
+
+    "meta": {
+      "type": "object",
+      "required": ["title", "logline", "language", "subtitle_language", "fps", "aspect_ratios", "audience", "intent", "consent"],
+      "additionalProperties": false,
+      "properties": {
+        "title": { "type": "string", "minLength": 1 },
+        "logline": {
+          "type": "string",
+          "minLength": 20,
+          "description": "One sentence that sums up the story."
+        },
+        "language": {
+          "type": "string",
+          "pattern": "^[a-z]{2,3}(-[A-Za-z]{2,4})?$",
+          "description": "BCP-47 tag of the narration language, e.g. am for Amharic."
+        },
+        "subtitle_language": {
+          "type": "string",
+          "pattern": "^[a-z]{2,3}(-[A-Za-z]{2,4})?$"
+        },
+        "fps": { "type": "integer", "minimum": 12, "maximum": 60 },
+        "aspect_ratios": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "enum": ["9:16", "16:9", "1:1", "4:5"] }
+        },
+        "audience": { "type": "string", "minLength": 20 },
+        "intent": { "type": "string", "minLength": 20 },
+        "consent": {
+          "type": "object",
+          "required": ["status", "details"],
+          "additionalProperties": false,
+          "properties": {
+            "status": {
+              "enum": ["not_required", "pending", "recorded"],
+              "description": "not_required: no real person is depicted or voiced. recorded: ETHICS.md holds the consent note. pending: must not be generated."
+            },
+            "details": { "type": "string" }
+          }
+        }
+      }
+    },
+
+    "style": {
+      "type": "object",
+      "required": ["block", "negative"],
+      "additionalProperties": false,
+      "properties": {
+        "block": {
+          "type": "string",
+          "minLength": 20,
+          "description": "Fixed prompt text appended to every keyframe prompt. Never re-worded per shot."
+        },
+        "negative": { "type": "string" },
+        "palette": {
+          "type": "object",
+          "additionalProperties": { "type": "string" },
+          "description": "Named colour description per scene, used in prompts and in the grade."
+        }
+      }
+    },
+
+    "characters": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "description"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+          "description": {
+            "type": "string",
+            "minLength": 20,
+            "description": "Reused verbatim in every prompt that contains this character."
+          },
+          "reference_sheet": {
+            "type": ["string", "null"],
+            "description": "Path to the approved golden reference image, relative to the repo root."
+          },
+          "source_photo": {
+            "type": ["string", "null"],
+            "description": "Path to a real family photograph of this person, relative to the repo root. Used only as a likeness reference for image-to-image generation and never displayed on screen. The stage must warn and fall back to a text-only prompt when the file is absent."
+          },
+          "seed": { "type": ["integer", "null"] }
+        }
+      }
+    },
+
+    "voices": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "object",
+        "required": ["voice_id", "instruction"],
+        "additionalProperties": false,
+        "properties": {
+          "voice_id": { "type": "string" },
+          "instruction": {
+            "type": "string",
+            "description": "Plain-language style instruction, e.g. 'calm, warm, unhurried'."
+          },
+          "model": { "type": "string" }
+        }
+      }
+    },
+
+    "shots": {
+      "type": "array",
+      "minItems": 8,
+      "maxItems": 12,
+      "items": {
+        "type": "object",
+        "required": ["id", "scene", "duration_s", "reason", "shot_size", "mode", "keyframe"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "pattern": "^[A-Z][0-9]{1,2}$" },
+          "scene": { "type": "string", "minLength": 1 },
+          "duration_s": { "type": "number", "exclusiveMinimum": 1, "maximum": 12 },
+          "reason": {
+            "type": "string",
+            "minLength": 15,
+            "description": "Why this shot exists. One sentence. Shown to reviewers and used in the walkthrough."
+          },
+          "shot_size": {
+            "enum": ["extreme_wide", "wide", "medium", "medium_close", "close", "extreme_close", "insert"]
+          },
+          "camera": { "type": "string" },
+          "mode": {
+            "enum": ["wan", "kenburns", "hold"],
+            "description": "wan: image-to-video on GPU. kenburns: slow pan/zoom over the still in FFmpeg. hold: static still."
+          },
+          "motion": {
+            "type": ["string", "null"],
+            "description": "Motion and camera only. Required when mode is wan."
+          },
+          "kenburns": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "zoom_from": { "type": "number", "minimum": 1, "maximum": 3 },
+              "zoom_to": { "type": "number", "minimum": 1, "maximum": 3 },
+              "pan": { "enum": ["none", "left", "right", "up", "down", "in", "out"] }
+            }
+          },
+          "keyframe": {
+            "type": "object",
+            "required": ["prompt"],
+            "additionalProperties": false,
+            "properties": {
+              "prompt": {
+                "type": "string",
+                "minLength": 20,
+                "description": "Scene description only. The style block and character descriptions are appended by the stage."
+              },
+              "seed": { "type": "integer" },
+              "characters": {
+                "type": "array",
+                "items": { "type": "string" }
+              },
+              "use_reference": { "type": "boolean", "default": true }
+            }
+          },
+          "narration": {
+            "type": ["object", "null"],
+            "required": ["text", "subtitle"],
+            "additionalProperties": false,
+            "properties": {
+              "voice": { "type": "string", "default": "narrator" },
+              "text": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Narration in the film's language."
+              },
+              "subtitle": {
+                "type": "string",
+                "minLength": 1,
+                "description": "English subtitle line(s). Max two lines of about 40 characters."
+              }
+            }
+          },
+          "ambience": {
+            "type": ["string", "null"],
+            "description": "Optional diegetic bed: wind, market, room tone. Leave null to omit."
+          }
+        }
+      }
+    },
+
+    "music": {
+      "type": "object",
+      "required": ["cues", "ducking", "loudness"],
+      "additionalProperties": false,
+      "properties": {
+        "cues": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["id", "from_shot", "to_shot", "intent", "caption"],
+            "additionalProperties": false,
+            "properties": {
+              "id": { "type": "string", "pattern": "^m[0-9]+$" },
+              "from_shot": { "type": "string" },
+              "to_shot": { "type": "string" },
+              "intent": { "type": "string", "minLength": 10 },
+              "caption": {
+                "type": "string",
+                "minLength": 20,
+                "description": "ACE-Step caption: style, mood, instruments, texture, era."
+              },
+              "bpm": { "type": "integer", "minimum": 40, "maximum": 180 },
+              "key": { "type": "string" },
+              "gain_db": { "type": "number", "maximum": 0, "minimum": -40 },
+              "candidates": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 8,
+                "default": 3
+              }
+            }
+          }
+        },
+        "ducking": {
+          "type": "object",
+          "required": ["threshold", "ratio", "attack_ms", "release_ms"],
+          "additionalProperties": false,
+          "properties": {
+            "threshold": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 },
+            "ratio": { "type": "number", "minimum": 1, "maximum": 20 },
+            "attack_ms": { "type": "integer", "minimum": 1 },
+            "release_ms": { "type": "integer", "minimum": 1 }
+          }
+        },
+        "loudness": {
+          "type": "object",
+          "required": ["target_lufs", "true_peak_db"],
+          "additionalProperties": false,
+          "properties": {
+            "target_lufs": { "type": "number", "minimum": -30, "maximum": -8 },
+            "true_peak_db": { "type": "number", "minimum": -6, "maximum": 0 }
+          }
+        }
+      }
+    },
+
+    "end_cards": {
+      "type": "array",
+      "minItems": 2,
+      "items": {
+        "type": "object",
+        "required": ["id", "duration_s", "lines"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string" },
+          "duration_s": { "type": "number", "exclusiveMinimum": 0.5, "maximum": 8 },
+          "background": { "enum": ["black", "paper"] },
+          "lines": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "type": "string" }
+          }
+        }
+      }
+    },
+
+    "exports": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["name", "aspect", "width", "height"],
+        "additionalProperties": false,
+        "properties": {
+          "name": { "type": "string" },
+          "aspect": { "enum": ["9:16", "16:9", "1:1", "4:5"] },
+          "width": { "type": "integer", "minimum": 240 },
+          "height": { "type": "integer", "minimum": 240 }
+        }
+      }
+    }
+  }
+}
