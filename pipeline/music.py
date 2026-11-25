@@ -121,7 +121,9 @@ def run(storyboard: dict, args, only) -> None:
         cue = window["cue"]
         if only and cue["id"] not in only:
             continue
-        candidates = cue.get("candidates", 3)
+        # MUSIC_CANDIDATES overrides the storyboard for a build nobody will
+        # audition, where extra takes are money spent on files never heard.
+        candidates = int(os.environ.get("MUSIC_CANDIDATES") or cue.get("candidates", 3))
         for index in range(1, candidates + 1):
             target = music_dir / f"{cue['id']}_candidate_{index}.wav"
             key = common.artifact_key("music", cue["id"], cue["caption"], window["render"],

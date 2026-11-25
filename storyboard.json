@@ -47,6 +47,10 @@
     "narrator": {
       "voice_id": "Kore",
       "instruction": "an older woman remembering, calm, warm, unhurried, speaking Amharic softly as if to one person close by; let the pauses breathe, never theatrical"
+    },
+    "granddaughter": {
+      "voice_id": "Leda",
+      "instruction": "a woman in her twenties, speaking Amharic quietly and with gratitude, as if to her grandmother across the room; unhurried, never theatrical"
     }
   },
 
@@ -133,8 +137,8 @@
       },
       "narration": {
         "voice": "narrator",
-        "text": "ያልመረጥኩትን ሕይወት፣ ያላወቅኩትን ባል... ‹ዕድልሽ ነው› ብለው ሊያሸክሙኝ ድግሱ ደምቋል።",
-        "subtitle": "They had lit the wedding fires to load me with a life I did not choose, a husband I did not know — \"it is your fate,\" they said."
+        "text": "ያልመረጥኩትን ባል... ‹ዕድልሽ ነው› አሉኝ።",
+        "subtitle": "A husband I did not choose... \"It is your fate,\" they said."
       },
       "ambience": "approaching footsteps, drum, ululation rising then cut"
     },
@@ -159,8 +163,8 @@
       },
       "narration": {
         "voice": "narrator",
-        "text": "ግን ደግሞ ከፍርሃቴ ይልቅ የነጻነት ጥማቴ በረታ።",
-        "subtitle": "But a thirst for freedom grew louder than my fear."
+        "text": "ከፍርሃቴ ይልቅ የነጻነት ጥማቴ በረታ።",
+        "subtitle": "My thirst for freedom grew louder than my fear."
       },
       "ambience": "wind, wet gravel underfoot, one dog barking far away"
     },
@@ -181,8 +185,8 @@
       },
       "narration": {
         "voice": "narrator",
-        "text": "የታሰረብኝን የባህል ገመድ በጥሼ፣ ጨለማውን ተገን አድርጌ ተነሳሁ።",
-        "subtitle": "I tore the rope of custom that bound me and made the darkness my cloak."
+        "text": "እሾሁ እግሬን ቢወጋኝም፣ ድንጋዩ ቢያደማኝም...",
+        "subtitle": "The thorn cut my feet, the stone bruised me..."
       },
       "ambience": "breath, wind, distant cockerel"
     },
@@ -201,11 +205,7 @@
         "characters": [],
         "use_reference": false
       },
-      "narration": {
-        "voice": "narrator",
-        "text": "እሾሁ እግሬን ቢወጋኝም፣ ድንጋዩ ቢያደማኝም...",
-        "subtitle": "The thorn cut my feet, the stone bruised me..."
-      },
+      "narration": null,
       "ambience": "wind, cloth flapping, a bus engine growing audible"
     },
     {
@@ -229,8 +229,8 @@
       },
       "narration": {
         "voice": "narrator",
-        "text": "ከኋላዬ ካለው እስር ቤት ይልቅ ከፊቴ ያለው ያልታወቀ መንገድ ናፈቀኝ።",
-        "subtitle": "...but the unknown road ahead drew me more than the prison behind."
+        "text": "ከኋላዬ ካለው እስር ቤት ይልቅ ያልታወቀው መንገድ ናፈቀኝ።",
+        "subtitle": "...but the unknown road drew me more than the prison behind."
       },
       "ambience": "wind over open ground, distant engine, one bird"
     },
@@ -296,7 +296,7 @@
         "characters": ["grandmother"]
       },
       "narration": {
-        "voice": "narrator",
+        "voice": "granddaughter",
         "text": "ያኔ እሷ ባትሮጥ ኖሮ... ዛሬ እኔ መቆም አልችልም ነበር።",
         "subtitle": "If she had not run that night... I would not be standing here today."
       },
@@ -318,7 +318,7 @@
         "use_reference": false
       },
       "narration": {
-        "voice": "narrator",
+        "voice": "granddaughter",
         "text": "የእሷ አንድ እርምጃ፣ የእኔ የሕይወት ጎዳና ሆነ።",
         "subtitle": "Her one step became the road of my life."
       },

@@ -56,12 +56,13 @@ def _gemini_key() -> str:
 def _gemini_post(model: str, payload: dict, *, timeout: int = 180) -> dict:
     key = _gemini_key()
     url = f"{GEMINI_BASE}/models/{model}:generateContent"
+    # The key travels in a header, not the query string, so it cannot end up
+    # in a logged or echoed URL.
     response = requests.post(
-        url, params={"key": key}, json=payload, timeout=timeout,
-        headers={"Content-Type": "application/json"},
+        url, json=payload, timeout=timeout,
+        headers={"Content-Type": "application/json", "x-goog-api-key": key},
     )
     if response.status_code >= 400:
-        # Never echo the URL: it carries the key in the query string.
         raise requests.HTTPError(
             f"gemini {model} -> HTTP {response.status_code}: {response.text[:400]}",
             response=response,
