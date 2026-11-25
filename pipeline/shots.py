@@ -123,10 +123,16 @@ def run(storyboard: dict, args, only) -> None:
     timing = load_timing()
     durations = {entry["id"]: entry["duration_s"] for entry in timing["shots"]}
     mode = common.provider_mode()
-    contract_durations = {shot["id"]: shot["duration_s"] for shot in storyboard["shots"]}
-    for shot in storyboard["shots"]:
-        if durations.get(shot["id"], 0) < contract_durations[shot["id"]] - 0.01:
-            print(f"  ! timing for {shot['id']} is shorter than the storyboard; run `make narration`")
+    # Narration trims shots to fit the 90 s ceiling, so a shot shorter than its
+    # storyboard intent is normal. Only warn when the cut leaves no room for the
+    # line itself, which means the timing file is stale.
+    lead = timing.get("narration_lead_in_s", 0.5)
+    tail = timing.get("narration_tail_s", 0.6)
+    for entry in timing["shots"]:
+        if entry["id"] in durations and entry["narration_s"]:
+            floor = entry["narration_s"] + lead + tail - 0.05
+            if entry["duration_s"] < floor:
+                print(f"  ! timing for {entry['id']} is shorter than its line; run `make narration`")
 
     for shot in storyboard["shots"]:
         if only and shot["id"] not in only:

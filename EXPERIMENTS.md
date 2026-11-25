@@ -215,14 +215,19 @@ and the cache invalidates exactly one clip.
 
 **Hypothesis:** 2.2 words per second, the number `script.py` uses for warnings.
 
-**Test:** measured the ten lines Gemini TTS produced (A2-D1) from the trimmed
-24 kHz WAVs.
+**Test:** measured all eleven lines Gemini TTS produced (A2-D2) from the trimmed
+24 kHz WAVs. D2 came a day after the others, from a key in a second project with
+its own daily allowance.
 
-**Result:** 76 spoken words in 61.7 s of audio, or **1.23 words/s** - Amharic
+**Result:** 83 spoken words in 67.1 s of audio, or **1.24 words/s** - Amharic
 words are long, and the instruction deliberately leaves room for pauses. The
-line lengths were written for the guess, so each shot now needs more time than
-its storyboard intent, and the 90 s ceiling will trim slack from the shots that
-have it. D2 could not be measured: the free tier allows ten requests per day.
+line lengths were written for the 2.2 guess, so every shot needs more time than
+its storyboard intent: the first eleven-line timing came to 91.4 s against a
+90 s ceiling. Six shots gave up 12.9 s of slack and the film closed at 90.0 s,
+but the last two seconds of breathing room had to come from the stage itself:
+the gap after each line dropped from 0.8 s to 0.6 s, which recovered the 1.4 s
+overrun without touching the words or 90 s of picture.
 
 **Decision:** keep generating narration first. The measured numbers, not the
-guess, set the edit; `script.py` only warns.
+guess, set the edit; `script.py` only warns. With the script this tight, the
+next revision should cut a line rather than squeeze the padding again.

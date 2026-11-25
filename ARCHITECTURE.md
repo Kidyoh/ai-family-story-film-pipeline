@@ -34,17 +34,20 @@ runs the same path and prints the plan without generating anything.
 
 The obvious order is picture first, voice to fit. That is wrong here, because
 Amharic line length is the one thing I could not predict: 83 words came out at
-42.1 s of speech in the first measured run.
+67.1 s of speech, 1.23 words per second rather than the 2.2 the storyboard was
+written against.
 
 So `narration.py` runs first and writes `outputs/audio/timing.json`:
 
 ```
-shot_duration = max(storyboard.duration_s, speech + lead_in(0.5) + tail(0.8))
+shot_duration = max(storyboard.duration_s, speech + lead_in(0.5) + tail(0.6))
 ```
 
 If the sum pushes the film past 90 s, slack is trimmed from the shots that have
-it, last shot first, never below `speech + pads`. When the film cannot fit, the
-stage says so instead of quietly shipping a 94-second cut. `shots.py` and
+it, last shot first, never below `speech + pads`. That is what happened here:
+the first eleven-line timing came to 91.4 s, six shots gave up 12.9 s of slack,
+and the finished film landed on 90.0 s. When the film cannot fit, the stage says
+so instead of quietly shipping a 94-second cut. `shots.py` and
 `music.py` read the same timing file, so picture, voice and score cannot drift.
 
 ## 3. Caching

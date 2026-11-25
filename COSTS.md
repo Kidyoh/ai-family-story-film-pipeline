@@ -26,7 +26,7 @@ at CRF 18 while the horizontal derivation is 26 MB.
 
 | stage | calls | model | billed | estimate in `runs.jsonl` |
 |---|---|---|---|---|
-| narration | 10 of 11 | `gemini-2.5-flash-preview-tts` | free tier, 10 requests/day | $0.007 |
+| narration | 11 of 11 | `gemini-2.5-flash-preview-tts` | free tier, 10 requests/day | $0.008 |
 | character sheets | 2 | FLUX.2 klein 4B / flux-1-schnell | free tier (neurons) | $0.004 |
 | keyframes | 12 | FLUX.2 klein 4B | free tier (neurons) | $0.042 |
 | shots | 12 | no video endpoint, Ken Burns | local FFmpeg | $0.00 |
@@ -68,8 +68,10 @@ projected for the assignment: **under $3**.
 ## Free-tier reality, measured
 
 - **Gemini TTS**: 10 requests per day per model. The film needs 11 lines, so the
-  build stopped at D2 with `429 RESOURCE_EXHAUSTED` and resumes after the daily
-  reset. Each request cost about $0.0007 at list price.
+  build stopped at D2 with `429 RESOURCE_EXHAUSTED`. The quota is charged per
+  Google Cloud project, not per key, so a key from a *different* project gets its
+  own ten; D2 was spoken the same afternoon that way, and the ten cached lines
+  were reused. Each request cost about $0.0007 at list price.
 - **Gemini image**: free-tier limit is literally `0`; the model is paid-only.
   An API key alone cannot paint a frame.
 - **Cloudflare Workers AI**: 10,000 neurons per day free. FLUX.2 klein 4B is

@@ -110,11 +110,17 @@ build was circular.
 
 **Cause:** the key arrived late, so no real Amharic speech had ever been timed.
 
-**Fix:** the real run happened. Ten lines measured **1.23 words/s**, against the
-2.2 guess - the guess was 44% optimistic, and only the measured audio sets the
-edit. D2 is still a tone: the free tier allows ten TTS requests per day and the
-film needs eleven, so `make narration` stops there with `429` and finishes after
-the daily reset. The stage resumes from cache instead of re-speaking A2-D1.
+**Fix:** the real run happened. Eleven lines measured **1.24 words/s**, against
+the 2.2 guess - the guess was 44% optimistic, and only the measured audio sets
+the edit. D2 needed a second day: the free tier allows ten TTS requests per day
+and the film needs eleven, so `make narration` stopped there with `429`. The
+stage resumed from cache instead of re-speaking A2-D1, and D2 was spoken from a
+key in another Google Cloud project, whose allowance is separate.
+
+The measured speech then overflowed the ceiling: 91.4 s, with every shot already
+at `speech + pads`. Shrinking the tail from 0.8 s to 0.6 s recovered the 1.4 s
+and the film closed at 90.0 s, which is legal but leaves no margin - the honest
+fix for the next revision is fewer words, not less padding.
 
 **Lesson:** budget a provider quota like a dependency. Eleven lines against a
 ten-a-day cap is a two-day build, and the stage had to be made resumable *before*

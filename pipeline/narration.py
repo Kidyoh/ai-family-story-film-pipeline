@@ -23,7 +23,10 @@ from .common import out_path, rel, stage_cli, wav_duration
 
 SAMPLE_RATE = 24000
 LEAD_IN = 0.5   # silence before the first word of a line
-TAIL = 0.8      # silence after the last word, so the cut does not feel clipped
+# Kore speaks Amharic at 1.23 words/s, not the 2.2 the storyboard was timed for,
+# so 83 words need 67 s of a 82 s picture budget. A 0.8 s tail then pushed the
+# film to 91.4 s; 0.6 s keeps a beat after each line and still lands under 90 s.
+TAIL = 0.6
 CEILING = 90.0  # seconds; the brief's hard limit
 PACE_S = 6.0    # seconds between real TTS requests; the preview model throttles bursts
 
