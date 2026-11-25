@@ -35,6 +35,13 @@ that carry the most meaning - the tear and the hands - are the cheapest and
 stillest in the film, which is the argument for the hybrid approach: motion
 where it adds, stillness everywhere else.
 
+The `mode` column is the intent, not what ran. This build had no video endpoint
+(the Cloudflare account exposes 52 AI models and none of them generate video),
+so all twelve shots went through the local treatment in `shots.py`: an eased
+camera move, a handheld drift, a small light flicker and fixed-seed grain. That
+makes a still read as filmed; it cannot make smoke, steam or cloth move, which
+is what the four Wan shots were for.
+
 ## Look
 
 Hand-painted gouache and ink on coarse paper. This is a likeness safeguard

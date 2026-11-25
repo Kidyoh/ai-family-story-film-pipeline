@@ -231,3 +231,30 @@ overrun without touching the words or 90 s of picture.
 **Decision:** keep generating narration first. The measured numbers, not the
 guess, set the edit; `script.py` only warns. With the script this tight, the
 next revision should cut a line rather than squeeze the padding again.
+
+## 14. Making a still read as filmed
+
+**Hypothesis:** the first cut felt like a slideshow not because the camera moves
+were wrong but because every shot made the same move: a linear push at constant
+speed, with nothing else moving in frame.
+
+**Test:** re-rendered A4 four ways and compared frames at 0 s, 4.5 s and 9 s -
+linear vs smoothstep easing, with and without handheld drift, flicker and grain.
+Then checked what a video endpoint would cost instead: `GET /ai/models/search`
+on the Cloudflare account returns 52 models, none of them video, so image-to-video
+would need a new paid account.
+
+**Result:** easing alone changes the read most - a smoothstep move is 50% faster
+mid-shot and settles at both ends, so the frame stops feeling like it is on rails.
+Drift, flicker and grain add the rest at the cost of bitrate: grain roughly doubles
+a clip at `crf 18`, so the shipped settings are `c0s=3` at `crf 20`. Twelve clips
+now take 106.8 s to render (was 83.3 s) and total 43 MB (was 38 MB); the vertical
+export is 68.3 MB (was 50.1 MB). The grain seed is fixed per shot, so a re-run is
+byte-identical and the "deterministic Ken Burns" claim still holds.
+
+**Decision:** ship it, and say plainly what it is not. This is a filmed painting,
+not animation: smoke, steam and cloth are still frozen, and the four `wan` shots
+are logged as `fallback` because no endpoint exists. Real motion means paying for
+four i2v clips (about 30 s of generated video) and accepting that a model may warp
+a painted face; the pipeline already supports it via `WAN_ENDPOINT`, so it is a
+configuration change, not a rewrite.

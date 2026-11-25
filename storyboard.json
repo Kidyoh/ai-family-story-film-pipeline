@@ -60,6 +60,11 @@
       "camera": "locked wide, static",
       "mode": "wan",
       "motion": "thin smoke drifts across the frame, the lamp flame behind the doorway flickers, camera pushes in very slowly toward the lit door",
+      "kenburns": {
+        "zoom_from": 1.0,
+        "zoom_to": 1.06,
+        "pan": "in"
+      },
       "keyframe": {
         "prompt": "a small round highland hut of mud and thatch at night, a warm orange strip of lamplight escaping through the crooked door, thin woodsmoke rising into a cold indigo sky, wet grass, distant mountains in silhouette, no people visible, cold indigo night with one amber kerosene glow",
         "seed": 31001,
@@ -141,6 +146,11 @@
       "camera": "tracking sideways, low",
       "mode": "wan",
       "motion": "fog rolls slowly across the ridge, the edge of her shawl lifts in the wind, camera tracks gently beside her at walking speed",
+      "kenburns": {
+        "zoom_from": 1.02,
+        "zoom_to": 1.05,
+        "pan": "right"
+      },
       "keyframe": {
         "prompt": "pre-dawn highland path, a girl of thirteen walking fast barefoot between wet stone walls, heavy fog swallowing the path behind her, her red shawl clutched to her chest, her white dress soaked at the hem, cold slate-blue light, mountains barely visible above the mist",
         "seed": 31005,
@@ -205,6 +215,11 @@
       "camera": "locked wide, static",
       "mode": "wan",
       "motion": "diesel smoke drifts and thins above the road, fog moves slowly through the valley, the tiny figure does not move, camera holds perfectly still",
+      "kenburns": {
+        "zoom_from": 1.0,
+        "zoom_to": 1.03,
+        "pan": "none"
+      },
       "keyframe": {
         "prompt": "vast Ethiopian highland valley at first light, a tiny girl in a white dress standing at the edge of a switchback road, an old bus far below with a thin plume of diesel smoke, ridges layered in blue fog, pale ochre grass, cold and enormous and quiet",
         "seed": 31008,
@@ -268,6 +283,11 @@
       "camera": "eye level, slow push",
       "mode": "wan",
       "motion": "steam rises steadily from the coffee pot in the foreground, her eyes crinkle into a small smile, the lamp flame behind her flickers, camera pushes in very slowly",
+      "kenburns": {
+        "zoom_from": 1.0,
+        "zoom_to": 1.1,
+        "pan": "in"
+      },
       "keyframe": {
         "prompt": "an elderly Ethiopian woman of about seventy sitting in a warm room at a coffee ceremony, white netela over silver-threaded hair, dark green dress with a tibeb border, steam rising from a black clay coffee pot, small cups on a tray, honey lamplight, her hands resting in her lap, faded henna on her palms, calm and proud",
         "seed": 31011,

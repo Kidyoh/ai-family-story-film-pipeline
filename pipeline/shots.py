@@ -36,38 +36,63 @@ def load_timing() -> dict:
     return json.loads(path.read_text())
 
 
-def render_kenburns(source, target, *, duration: float, zoom_from: float, zoom_to: float, pan: str) -> None:
-    """Zoompan over a still, rendered from a 2x downscale so the motion is smooth.
+# Bump when the moving-still treatment changes, so cached clips re-render.
+RENDERER = "living-still-v1"
+
+
+def render_kenburns(source, target, *, duration: float, zoom_from: float, zoom_to: float,
+                    pan: str, seed: int = 1) -> None:
+    """Animate a still so it reads as filmed rather than as a photo on a slider.
+
+    Four treatments, all deterministic and all rendered locally:
+
+      eased move   smoothstep instead of a linear ramp, so the camera eases out of
+                   the first frame and settles on the last instead of sliding at
+                   constant speed on rails.
+      handheld     two slow sine drifts on x and y, sampled from the source and
+                   therefore sub-pixel after the 2x supersample, which is what
+                   stops the frame feeling locked to a tripod.
+      flicker      a very small per-frame brightness wobble, the way a kerosene
+                   lamp or a practical light actually behaves.
+      grain        temporal luma noise with a fixed seed: adds texture and, because
+                   the seed is fixed, keeps the stage reproducible.
 
     The input is scaled up before the move and the crop is taken from that, which
     is what stops zoompan from stepping by whole pixels and juddering.
     """
     frames = max(2, int(round(duration * FPS)))
+    last = frames - 1
     z0, z1 = zoom_from, zoom_to
     if pan in {"left", "right", "up", "down"}:
         z0, z1 = max(1.02, z0), max(1.02, z1)
-    zoom = f"{z0}+({z1}-{z0})*on/{frames - 1}"
+    progress = f"(on/{last})"
+    ease = f"({progress}*{progress}*(3-2*{progress}))"
+    zoom = f"{z0}+({z1}-{z0})*{ease}"
     centre_x = "(iw/2-(iw/zoom/2))"
     centre_y = "(ih/2-(ih/zoom/2))"
-    travel = "((on/{})-0.5)".format(frames - 1)
+    drift_x = f"+7*sin(2*PI*(on/{FPS})/6.3)+2.5*sin(2*PI*(on/{FPS})/2.9)"
+    drift_y = f"+5*sin(2*PI*(on/{FPS})/8.1)+2*sin(2*PI*(on/{FPS})/3.3)"
     offsets = {
         "none": (centre_x, centre_y),
         "in": (centre_x, centre_y),
         "out": (centre_x, centre_y),
-        "left": (f"{centre_x}-{travel}*iw*0.04", centre_y),
-        "right": (f"{centre_x}+{travel}*iw*0.04", centre_y),
-        "up": (centre_x, f"{centre_y}-{travel}*ih*0.04"),
-        "down": (centre_x, f"{centre_y}+{travel}*ih*0.04"),
+        "left": (f"{centre_x}-{ease}*iw*0.04", centre_y),
+        "right": (f"{centre_x}+{ease}*iw*0.04", centre_y),
+        "up": (centre_x, f"{centre_y}-{ease}*ih*0.04"),
+        "down": (centre_x, f"{centre_y}+{ease}*ih*0.04"),
     }
     x_expr, y_expr = offsets.get(pan, offsets["none"])
+    flicker = "0.004*sin(2*PI*t/1.9)+0.002*sin(2*PI*t/0.83)"
     common.ff(
         "-loop", "1", "-framerate", FPS, "-i", source, "-t", round(duration, 3),
         "-vf",
-        f"scale={WIDTH * 2}:{HEIGHT * 2}:force_original_aspect_ratio=increase,"
+        f"scale={WIDTH * 2}:{HEIGHT * 2}:force_original_aspect_ratio=increase:flags=lanczos,"
         f"crop={WIDTH * 2}:{HEIGHT * 2},"
-        f"zoompan=z='{zoom}':x='{x_expr}':y='{y_expr}':d=1:s={WIDTH}x{HEIGHT}:fps={FPS},"
-        f"format=yuv420p",
-        "-an", "-c:v", "libx264", "-preset", "veryfast", "-crf", "18",
+        f"zoompan=z='{zoom}':x='{x_expr}{drift_x}':y='{y_expr}{drift_y}'"
+        f":d=1:s={WIDTH}x{HEIGHT}:fps={FPS},"
+        f"eq=brightness='{flicker}':eval=frame,"
+        f"noise=c0s=3:c0f=t+u:c0_seed={seed},unsharp=5:5:0.35,format=yuv420p",
+        "-an", "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
         "-pix_fmt", "yuv420p", "-r", FPS, target,
     )
 
@@ -145,7 +170,7 @@ def run(storyboard: dict, args, only) -> None:
         kb = shot.get("kenburns") or {}
         key = common.artifact_key(
             "clip", shot["id"], common.sha256_file(keyframe), duration, shot["mode"], kb,
-            shot.get("motion"), mode,
+            shot.get("motion"), mode, RENDERER,
         )
         if common.is_fresh(target, key) and not args.force:
             print(f"  {shot['id']}: cached")
@@ -171,7 +196,7 @@ def run(storyboard: dict, args, only) -> None:
             render_kenburns(
                 keyframe, target, duration=duration,
                 zoom_from=kb.get("zoom_from", 1.0), zoom_to=kb.get("zoom_to", 1.08),
-                pan=kb.get("pan", "in"),
+                pan=kb.get("pan", "in"), seed=shot["keyframe"].get("seed", 1),
             )
             if shot["mode"] == "wan" and mode == "real":
                 common.log_run(stage="shots", operation="render", provider="local", model="ffmpeg",

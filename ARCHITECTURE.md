@@ -60,7 +60,7 @@ semantic inputs, not of the clock or the file's mtime:
 | narration | shot id, Amharic text, voice id, style instruction, model, mode |
 | keyframe | assembled prompt, negative prompt, seed, reference photo hash, mode |
 | character sheet | description, style block, reference photo hash |
-| clip | keyframe hash, duration, mode, Ken Burns params, motion text |
+| clip | keyframe hash, duration, mode, Ken Burns params, motion text, renderer version |
 | cue candidate | caption, duration, bpm, key, candidate index, mode |
 
 Changing the style block invalidates all 12 keyframes and nothing else.
@@ -119,6 +119,15 @@ Only implemented once each, in `pipeline/providers.py`.
 
 Video and music are deliberately not hard dependencies: the assignment grades
 the pipeline and the film, and a 3-day build must not be blocked by a GPU queue.
+
+When no video endpoint exists, `render_kenburns` still tries to make a still read
+as filmed: a smoothstep-eased move instead of a linear slide, two slow sine
+drifts on x and y (sub-pixel after the 2x supersample), a per-frame brightness
+wobble, and luma grain with a fixed seed so the stage stays reproducible. The
+cache key carries a `renderer` version, so changing that treatment re-renders
+clips without touching keyframes or narration. This build's Cloudflare account
+listed 52 models and no video model, so every clip is this treatment; the film
+has no true i2v in it and the docs say so rather than implying otherwise.
 
 ## 7. One master, two exports
 

@@ -52,7 +52,8 @@ Copy `.env.example` to `.env` (git-ignored) and fill in what you have:
 | `MUSIC_ENDPOINT` | music | real score generation (optional) |
 | `PROVIDER_MODE` | all | `real` / `mock`; empty = real if a key is present |
 
-Every optional capability degrades: no video endpoint means Ken Burns shots, no
+Every optional capability degrades: no video endpoint means the local moving-still
+treatment in `shots.py` (eased move, handheld drift, flicker, grain), no
 music endpoint means a synthesised bed, no image reference means text-only
 keyframes. Each fallback is one line in `runs.jsonl`.
 
