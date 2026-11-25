@@ -30,6 +30,8 @@ PRICE = {
     "gemini-2.5-flash-image": 0.039,
     "gemini-3-pro-image-preview": 0.134,
     "@cf/black-forest-labs/flux-1-schnell": 0.0004,
+    "@cf/black-forest-labs/flux-2-klein-4b": 0.0035,  # per 1080x1920 frame
+    "@cf/black-forest-labs/flux-2-klein-9b": 0.0171,  # per 1080x1920 frame
     "gemini-2.5-flash-preview-tts": 0.00002,  # per character of narration
     "wan-i2v": 0.30,  # per 5 s clip, dependent on host
     "ace-step": 0.00,  # self-hosted
@@ -94,7 +96,8 @@ def gemini_speech(*, text: str, voice_id: str, instruction: str, model: str | No
         },
     }
     data = with_retries(
-        lambda: _gemini_post(model, payload, timeout=120), attempts=4, label=f"tts {voice_id}"
+        lambda: _gemini_post(model, payload, timeout=120), attempts=4, base_delay=15.0,
+        label=f"tts {voice_id}",
     )
     mime, raw = _first_inline(data)
     return pcm_to_wav(raw, mime), PRICE.get(model, 0.0) * max(1, len(text))
@@ -177,16 +180,53 @@ def _cloudflare_creds() -> tuple[str, str]:
     return token, account
 
 
+def _reference_tile(reference: Path) -> bytes:
+    """The reference photo as a 512px JPEG tile.
+
+    FLUX.2 edits from reference images rather than copying them, and it caps
+    each input at 512px, so only a face-sized tile ever leaves this machine.
+    Sending the full photograph would add cost and privacy exposure for detail
+    the painting does not use.
+    """
+    tile = common.out_path("tmp", f"reference_{reference.stem}.jpg")
+    common.ff("-i", reference,
+              "-vf", "scale=512:512:force_original_aspect_ratio=increase,crop=512:512",
+              "-frames:v", "1", "-q:v", "3", tile)
+    try:
+        return tile.read_bytes()
+    finally:
+        tile.unlink(missing_ok=True)
+
+
 def cloudflare_image(*, prompt: str, negative: str, width: int, height: int, seed: int,
-                     model: str = "@cf/black-forest-labs/flux-1-schnell") -> tuple[bytes, float]:
+                     reference: Path | None = None,
+                     model: str | None = None) -> tuple[bytes, float]:
+    """FLUX.2 on Workers AI: text-to-image, or an edit when a reference is given.
+
+    FLUX.2 takes multipart form data even for a prompt-only request, and the
+    reference has to arrive as `input_image_0`. Unlike flux-1-schnell it accepts
+    width, height and seed, so a 9:16 frame is composed for the master instead
+    of being cropped out of a square. The 4B model is the default because the
+    9B one costs about five times more and would exhaust the daily free
+    allowance after roughly six frames.
+    """
+    common.load_env()
+    model = model or os.environ.get("CF_IMAGE_MODEL", "@cf/black-forest-labs/flux-2-klein-4b")
     token, account = _cloudflare_creds()
     url = f"https://api.cloudflare.com/client/v4/accounts/{account}/ai/run/{model}"
-    payload = {"prompt": f"{prompt}\n\nAvoid: {negative}", "steps": 8, "seed": seed,
-               "width": width, "height": height}
+    fields: list[tuple[str, tuple]] = [
+        ("prompt", (None, f"{prompt}\n\nAvoid: {negative}")),
+        ("width", (None, str(width))),
+        ("height", (None, str(height))),
+        ("seed", (None, str(seed))),
+    ]
+    if reference is not None:
+        fields.append(("input_image_0",
+                       ("reference.jpg", _reference_tile(reference), "image/jpeg")))
 
     def call():
         response = requests.post(url, headers={"Authorization": f"Bearer {token}"},
-                                 json=payload, timeout=180)
+                                 files=fields, timeout=300)
         if response.status_code >= 400:
             raise requests.HTTPError(
                 f"cloudflare {model} -> HTTP {response.status_code}: {response.text[:300]}",
@@ -199,10 +239,12 @@ def cloudflare_image(*, prompt: str, negative: str, width: int, height: int, see
             image = (body.get("result") or {}).get("image")
             if not image:
                 raise ProviderError("cloudflare returned JSON without an image")
+            # base64 of a JPEG or PNG; the caller sniffs the magic bytes and
+            # lets ffmpeg normalise whatever container comes back.
             return base64.b64decode(image)
         return response.content
 
-    raw = with_retries(call, attempts=3, label=f"keyframe {seed}")
+    raw = with_retries(call, attempts=3, label="keyframe")
     return raw, PRICE.get(model, 0.0)
 
 

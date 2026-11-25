@@ -19,6 +19,7 @@ Writes: outputs/keyframes/<shot>.png, outputs/refs/<character>_sheet.png
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 from . import common, providers
@@ -118,9 +119,10 @@ def generate(storyboard: dict, *, prompt: str, target: Path, seed: int, referenc
              shot_id: str, stage: str, mode: str, scene: str = "A") -> None:
     """Generate one image, choosing the provider by what the request needs.
 
-    A reference photo requires an image model that accepts images, so Gemini
-    takes that job. Plain text-to-image goes to FLUX on Cloudflare, which is
-    the cheapest option and the one whose token is a single key.
+    FLUX.2 on Cloudflare handles both cases and is the default: it accepts
+    width, height, seed and up to four reference images, and it is the only one
+    of the two available on a free tier. Gemini's image model is the fallback
+    for a key that has no Cloudflare account, even though its free quota is 0.
     """
     negative = storyboard["style"]["negative"]
     if mode == "mock":
@@ -130,17 +132,25 @@ def generate(storyboard: dict, *, prompt: str, target: Path, seed: int, referenc
                        status="ok", shot_id=shot_id, bytes=target.stat().st_size)
         return
 
-    use_gemini = reference is not None or not common.secrets_present()["CLOUDFLARE_API_TOKEN"]
+    # FLUX.2 on Cloudflare does both jobs: plain text-to-image, and an edit when
+    # a reference photo is supplied. It is the default because Gemini's image
+    # model is paid-only (free-tier quota is zero), so a key alone cannot paint
+    # a frame. Gemini remains the fallback when there is no Cloudflare token.
+    common.load_env()
+    use_gemini = not common.secrets_present()["CLOUDFLARE_API_TOKEN"]
     if use_gemini:
         raw, cost = providers.gemini_image(
             prompt=prompt, negative=negative, aspect_ratio="9:16", reference=reference,
         )
-        model = "gemini-2.5-flash-image"
+        model = os.environ.get("GEMINI_IMAGE_MODEL", "gemini-2.5-flash-image")
+        provider_name = "gemini"
     else:
-        width, height = 768, 1344  # 4:7 - close enough to 9:16 that shots.py crops cleanly
-        raw, cost = providers.cloudflare_image(prompt=prompt, negative=negative,
-                                               width=width, height=height, seed=seed)
-        model = "@cf/black-forest-labs/flux-1-schnell"
+        raw, cost = providers.cloudflare_image(
+            prompt=prompt, negative=negative, width=FRAME[0], height=FRAME[1],
+            seed=seed, reference=reference,
+        )
+        model = os.environ.get("CF_IMAGE_MODEL", "@cf/black-forest-labs/flux-2-klein-4b")
+        provider_name = "cloudflare"
 
     suffix = ".jpg" if raw[:3] == b"\xff\xd8\xff" else ".png"
     staged = target.with_suffix(suffix)
@@ -149,7 +159,7 @@ def generate(storyboard: dict, *, prompt: str, target: Path, seed: int, referenc
                                    f"crop={FRAME[0]}:{FRAME[1]}", "-frames:v", "1", target)
     if staged != target:
         staged.unlink(missing_ok=True)
-    common.log_run(stage=stage, operation="image", provider="gemini" if use_gemini else "cloudflare",
+    common.log_run(stage=stage, operation="image", provider=provider_name,
                    model=model, status="ok", shot_id=shot_id, seed=seed,
                    reference=rel(reference) if reference else None,
                    cost_usd_estimate=round(cost, 4), bytes=target.stat().st_size)

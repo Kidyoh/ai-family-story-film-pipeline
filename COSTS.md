@@ -22,23 +22,29 @@ Mock video is heavier than real video will be: grain that encodes cheaply on a
 photo is expensive on a smooth gradient, which is why the mock vertical is 67 MB
 at CRF 18 while the horizontal derivation is 26 MB.
 
-## Projected: one real build
+## Actual: the real build
 
-| stage | calls | model | unit | cost |
+| stage | calls | model | billed | estimate in `runs.jsonl` |
 |---|---|---|---|---|
-| narration | 11 | `gemini-2.5-flash-preview-tts` | ~600 characters total | $0.01 |
-| character sheets | 2 | 1x Gemini image, 1x FLUX schnell | $0.039 / $0.0004 | $0.04 |
-| keyframes | 12 | 2x Gemini (likeness), 10x FLUX schnell | $0.039 / $0.0004 | $0.08 |
-| shots | 4 | Wan-class i2v, 7 s clips | ~$0.30 / clip | $1.20 |
-| music | 12 | ACE-Step, self-hosted on Kaggle | GPU time, not per call | $0.00 |
-| assembly | 2 | FFmpeg | local | $0.00 |
-| **total** | | | | **≈ $1.34** |
+| narration | 10 of 11 | `gemini-2.5-flash-preview-tts` | free tier, 10 requests/day | $0.007 |
+| character sheets | 2 | FLUX.2 klein 4B / flux-1-schnell | free tier (neurons) | $0.004 |
+| keyframes | 12 | FLUX.2 klein 4B | free tier (neurons) | $0.042 |
+| shots | 12 | no video endpoint, Ken Burns | local FFmpeg | $0.00 |
+| music | 12 cues | no music endpoint, synthesised bed | local | $0.00 |
+| **total** | | | | **≈ $0.05** |
 
-The estimate is dominated by video: 4 of 12 shots carry 89% of the spend. That
-is the whole reason 8 shots are Ken Burns - the same film, the same motion where
-it matters, at a ninth of the price. A second 16:9 composition pass would have
-added about $1.30 and 12 more image calls; it was rejected for that reason as
-much as for the art-direction one.
+14 images at roughly 1,500 neurons each is about 21,000 neurons against a free
+allowance of 10,000 per day, which is why the 4B model was chosen over the 9B
+one: the same 14 frames on 9B would have been about 24,000 neurons for $0.24.
+Both were run against a free Workers plan, so the dollars above are list price
+rather than a charge.
+
+The estimate that mattered was video: 4 hero shots on a Wan-class endpoint were
+budgeted at ~$0.30 per 5 s clip, or $1.20 for 89% of the spend. No such endpoint
+was available (Cloudflare's catalog has no video model, and no self-hosted
+server was rented), so all 12 shots are Ken Burns and the film cost nothing.
+That is the pipeline's designed failure mode, not a silent omission: every shot
+logs `fallback` or `kenburns` in `runs.jsonl`.
 
 Cost per attempt, not per deliverable: the first real run is a draft, and a
 second pass after the audience test is budgeted at the same ~$1.34. Total
@@ -59,9 +65,18 @@ projected for the assignment: **under $3**.
 - **No video on hands.** Hands are the highest-risk animated subject and the
   cheapest to fake, so shots B2 and D2 are stills.
 
-## Free-tier reality
+## Free-tier reality, measured
 
-Gemini's image and TTS calls here are small enough that a free-tier key covers
-them; Cloudflare Workers AI's FLUX calls are fractions of a cent. The only line
-that needs real money or real GPU time is video, and the pipeline treats it as
-optional so that a missing endpoint cannot block the deliverable.
+- **Gemini TTS**: 10 requests per day per model. The film needs 11 lines, so the
+  build stopped at D2 with `429 RESOURCE_EXHAUSTED` and resumes after the daily
+  reset. Each request cost about $0.0007 at list price.
+- **Gemini image**: free-tier limit is literally `0`; the model is paid-only.
+  An API key alone cannot paint a frame.
+- **Cloudflare Workers AI**: 10,000 neurons per day free. FLUX.2 klein 4B is
+  ~250–1,500 neurons per 1080x1920 frame depending on reference use, so the
+  whole film fits; the 9B model would not.
+- **Video**: no Wan-class model in Cloudflare's catalog and no rented GPU, so
+  this line stays $0.00 and every shot is Ken Burns.
+
+The only line that needs real money or real GPU time is video, and the pipeline
+treats it as optional so that a missing endpoint cannot block the deliverable.

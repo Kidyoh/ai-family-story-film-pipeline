@@ -98,11 +98,16 @@ Only implemented once each, in `pipeline/providers.py`.
 - **Gemini TTS**: `generateContent` with `responseModalities: ["AUDIO"]` and
   `speechConfig.prebuiltVoiceConfig.voiceName`. Returns headerless 16-bit PCM at
   24 kHz, which `pcm_to_wav` wraps without re-encoding.
-- **Gemini image**: same endpoint with `["IMAGE"]`; the family photograph goes in
-  as an `inline_data` part with an instruction to repaint, not to copy.
-- **FLUX (Workers AI)**: `POST /accounts/{id}/ai/run/@cf/black-forest-labs/flux-1-schnell`,
-  at 768x1344 (4:7, cropped to 9:16 in `keyframes.py`). Handles both a raw image
-  response and the base64-in-JSON variant.
+- **FLUX.2 (Workers AI)**: `POST /accounts/{id}/ai/run/@cf/black-forest-labs/flux-2-klein-4b`,
+  multipart form data even for a prompt-only request (fields `prompt`, `width`,
+  `height`, `seed`; the reference photo as `input_image_0` at 512x512). Returns
+  base64-in-JSON or a raw image; both are normalised to the 1080x1920 master.
+  The 4B model is the default because 9B costs about five times as much per
+  frame and would exhaust the free daily neuron allowance after ~6 frames.
+- **Gemini image**: same endpoint as TTS with `["IMAGE"]`; the photograph goes
+  in as an `inline_data` part with an instruction to repaint, not to copy. Kept
+  as the fallback for accounts with no Cloudflare token. Its free-tier quota is
+  0, so this path needs billing to run at all.
 - **Video**: either `CF_VIDEO_MODEL` (a Cloudflare catalog video model) or
   `WAN_ENDPOINT`, a self-hosted Wan 2.2 i2v server. The self-hosted contract is
   multipart: `image` file, form fields `prompt`, `seconds`, `seed`, mp4 back.

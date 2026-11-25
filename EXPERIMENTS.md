@@ -170,3 +170,59 @@ vertical master costs one FFmpeg pass (about 60 s) and 26 MB.
 **Decision:** one master, two exports, with the horizontal frame built from a
 blurred extension of the vertical. The compromise is visible, and `DESIGN.md`
 says so instead of hiding it.
+
+## 11. Which image model can actually paint a 9:16 frame?
+
+**Hypothesis:** Gemini's image model, which accepts the reference photo as an
+edit instruction, is the right default; FLUX is the cheaper fallback.
+
+**Test:** requested one frame from each. Gemini returned `429` with
+`free_tier_requests, limit: 0` - image generation is paid-only. flux-1-schnell
+returned `HTTP 400: Additional or unevaluated properties '/seed, /width,
+/height' not allowed`, and only makes a 1024x1024 square. FLUX.2 klein takes
+multipart input with `prompt`, `width`, `height`, `seed` and up to four
+`input_image_N` references.
+
+**Result:** the catalog order was backwards. FLUX.2 klein 4B painted all 14
+frames (12 shots + 2 reference sheets) in 138 s at 1080x1920, including the two
+photo-referenced shots, and the whole run fitted inside the 10,000-neuron free
+allowance. The 9B model costs ~1,363 neurons for the first megapixel against
+~26 per 512px tile on 4B, i.e. about five times more per frame.
+
+**Decision:** FLUX.2 klein 4B is the default (`CF_IMAGE_MODEL`), Gemini image is
+the fallback for accounts without a Cloudflare token. The reference photo is
+sent only as a 512x512 JPEG tile, and only for the shots that name her.
+
+## 12. Does the likeness survive a painted edit?
+
+**Hypothesis:** a 512px reference plus a written description keeps her face
+recognisable without reproducing the photograph.
+
+**Test:** compared D1 and D2 against `grandmother_source.png` at full size.
+
+**Result:** both carry her silver hair, brow, nose and the age in her features;
+D1 sits her at a coffee ceremony as prompted. D2 is closer than asked for: the
+prompt describes a close-up of two hands, and the model instead restaged the
+photograph's sofa pose, shawl and smile. It reads as her, and it is a painting
+rather than a composite, but the two-hand image the narration implies is absent.
+
+**Decision:** keep D2 as painted - it is the stronger closing frame - and record
+the deviation here rather than pretending the prompt was followed. If the family
+prefers the literal hands shot, the fix is one prompt edit and one regeneration,
+and the cache invalidates exactly one clip.
+
+## 13. What is the real Amharic speech rate?
+
+**Hypothesis:** 2.2 words per second, the number `script.py` uses for warnings.
+
+**Test:** measured the ten lines Gemini TTS produced (A2-D1) from the trimmed
+24 kHz WAVs.
+
+**Result:** 76 spoken words in 61.7 s of audio, or **1.23 words/s** - Amharic
+words are long, and the instruction deliberately leaves room for pauses. The
+line lengths were written for the guess, so each shot now needs more time than
+its storyboard intent, and the 90 s ceiling will trim slack from the shots that
+have it. D2 could not be measured: the free tier allows ten requests per day.
+
+**Decision:** keep generating narration first. The measured numbers, not the
+guess, set the edit; `script.py` only warns.

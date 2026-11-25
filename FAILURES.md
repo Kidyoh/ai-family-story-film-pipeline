@@ -102,16 +102,59 @@ deleted immediately (`clips/<shot>.raw.mp4`); the mock render is the largest
 local artifact at 303 MB for the whole `outputs/`. Real video generation belongs
 on Kaggle where the GPU and the disk are.
 
-## 9. The speech-rate guess is still a guess
+## 9. A speech-rate guess stood in for a measurement
 
-**Symptom:** `script.py` projects narration length at 2.2 words per second, and
-the only audio that exists yet is the mock tone, whose length is generated from
-that same guess.
+**Symptom:** `script.py` projected narration length at 2.2 words per second, and
+the mock tone's length came from that same guess, so every timing in the first
+build was circular.
 
-**Cause:** no `GEMINI_API_KEY` in this environment, so the real Amharic rate has
-never been measured.
+**Cause:** the key arrived late, so no real Amharic speech had ever been timed.
 
-**Fix (pending):** the first real `make narration` replaces the estimate with
-measured audio in `timing.json`; `script.py`'s number only drives warnings, never
-the edit. If the real rate is far from 2.2, the 90 s ceiling logic will trim
-shots and print exactly how much.
+**Fix:** the real run happened. Ten lines measured **1.23 words/s**, against the
+2.2 guess - the guess was 44% optimistic, and only the measured audio sets the
+edit. D2 is still a tone: the free tier allows ten TTS requests per day and the
+film needs eleven, so `make narration` stops there with `429` and finishes after
+the daily reset. The stage resumes from cache instead of re-speaking A2-D1.
+
+**Lesson:** budget a provider quota like a dependency. Eleven lines against a
+ten-a-day cap is a two-day build, and the stage had to be made resumable *before*
+it was discovered, not after.
+
+## 10. The image provider I designed around does not exist on the free tier
+
+**Symptom:** `make keyframes` failed twice: Gemini image returned `429` with
+`free_tier_requests, limit: 0`, and the Cloudflare fallback returned `HTTP 400:
+Additional or unevaluated properties '/seed, /width, /height' not allowed`.
+
+**Cause:** two separate mistakes. Gemini's image model is paid-only, which the
+pricing assumption in `COSTS.md` did not catch. flux-1-schnell's Workers AI
+schema accepts only `prompt` and `steps`, and returns a 1024x1024 square, so a
+9:16 master could only be cropped out of it.
+
+**Fix:** switched to FLUX.2 klein 4B, which takes multipart form data with
+`width`, `height`, `seed` and up to four `input_image_N` references - so a frame
+is composed for 9:16 and the photograph can still guide the painting. The 4B
+model keeps 14 frames inside the daily free neuron allowance that the 9B model
+would have blown in six.
+
+**Lesson:** capabilities are not interchangeable, and a fallback is only a
+fallback if it has been called once. Both endpoints were exercised for real
+before the stage was considered working.
+
+## 11. Bursts look like content failures
+
+**Symptom:** TTS refused B2 with `finishReason: OTHER` and no audio; the same
+line succeeded untouched a minute later. Later the same day the endpoint
+returned an explicit `429` with a ten-per-day limit.
+
+**Cause:** one quota, two error shapes. `OTHER` arrives with HTTP 200, so the
+first version retried after 2 s and 4 s - too soon to clear anything - and the
+stage aborted on a line that was fine. The 3.0 s per-call burst also spent the
+daily allowance faster than it needed to.
+
+**Fix:** TTS retries now back off 15/30/60 s, and requests are spaced 6 s apart.
+Neither makes a real quota problem disappear, but both turn a false content
+failure into a wait, and the cache means a resumed run costs nothing.
+
+**Lesson:** an HTTP 200 can still describe a quota error. The log line, not the
+status code, is what tells you which failure you have.

@@ -45,8 +45,9 @@ Copy `.env.example` to `.env` (git-ignored) and fill in what you have:
 
 | variable | used by | needed for |
 |---|---|---|
-| `GEMINI_API_KEY` | narration, keyframes | real Amharic TTS; image-to-image likeness |
-| `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` | keyframes | FLUX text-to-image |
+| `GEMINI_API_KEY` | narration, keyframes | real Amharic TTS; keyframes only if there is no Cloudflare token |
+| `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` | keyframes | FLUX.2 keyframes, text-only or photo-referenced |
+| `CF_IMAGE_MODEL` | keyframes | which FLUX.2 size to paint with (default `flux-2-klein-4b`) |
 | `CF_VIDEO_MODEL` or `WAN_ENDPOINT` | shots | real image-to-video (optional) |
 | `MUSIC_ENDPOINT` | music | real score generation (optional) |
 | `PROVIDER_MODE` | all | `real` / `mock`; empty = real if a key is present |
@@ -55,13 +56,22 @@ Every optional capability degrades: no video endpoint means Ken Burns shots, no
 music endpoint means a synthesised bed, no image reference means text-only
 keyframes. Each fallback is one line in `runs.jsonl`.
 
+Two free-tier facts shape the defaults, both measured on this build (see
+[`EXPERIMENTS.md`](EXPERIMENTS.md)):
+
+- Gemini's image model reports `limit: 0` on the free tier, so a Gemini key
+alone cannot paint a frame; Cloudflare's FLUX.2 does both text and photo
+references, so it is the default keyframe provider.
+- Gemini's TTS allows ten requests per day per model, and the film needs eleven
+lines. A build therefore resumes from cache across days instead of failing.
+
 ## What the stages do
 
 | stage | reads | writes | can it call a model |
 |---|---|---|---|
 | `pipeline/script.py` | storyboard | `outputs/plan.json`, `outputs/script.md` | no |
 | `pipeline/narration.py` | storyboard | per-shot WAVs, `radio_cut.wav`, `timing.json` | Gemini TTS |
-| `pipeline/keyframes.py` | storyboard, photo | 12 keyframes, 2 character sheets | Gemini image / FLUX |
+| `pipeline/keyframes.py` | storyboard, photo | 12 keyframes, 2 character sheets | FLUX.2 / Gemini image |
 | `pipeline/shots.py` | keyframes, timing | 12 clips | Wan-class i2v (optional) |
 | `pipeline/music.py` | storyboard, timing | 12 candidates, `score.wav` | ACE-Step (optional) |
 | `pipeline/assemble.py` | clips, cards, audio | two MP4s, subtitles | no |
@@ -99,7 +109,7 @@ The pipeline refuses to run while `meta.consent.status` is `pending`.
 
 - [`DESIGN.md`](DESIGN.md) - why the film looks and sounds the way it does
 - [`ARCHITECTURE.md`](ARCHITECTURE.md) - how the pipeline is put together
-- [`EXPERIMENTS.md`](EXPERIMENTS.md) - the ten decisions that were tested
+- [`EXPERIMENTS.md`](EXPERIMENTS.md) - the thirteen decisions that were tested
 - [`FAILURES.md`](FAILURES.md) - what broke, and what I changed because of it
 - [`COSTS.md`](COSTS.md) - measured and projected spend
 - [`ETHICS.md`](ETHICS.md) - consent, likeness, disclosure, withdrawal

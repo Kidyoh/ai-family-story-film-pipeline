@@ -15,6 +15,7 @@ Writes: outputs/audio/narration/<shot>.wav, outputs/audio/radio_cut.wav,
 from __future__ import annotations
 
 import json
+import time
 import wave
 
 from . import common, providers
@@ -24,6 +25,7 @@ SAMPLE_RATE = 24000
 LEAD_IN = 0.5   # silence before the first word of a line
 TAIL = 0.8      # silence after the last word, so the cut does not feel clipped
 CEILING = 90.0  # seconds; the brief's hard limit
+PACE_S = 6.0    # seconds between real TTS requests; the preview model throttles bursts
 
 
 def normalise(src, dst) -> None:
@@ -51,6 +53,7 @@ def run(storyboard: dict, args, only) -> None:
     narration_dir = out_path("audio", "narration", ".keep").parent
     timings = {}
     pieces = []
+    last_call = 0.0
 
     for shot in storyboard["shots"]:
         script = shot.get("narration")
@@ -77,6 +80,13 @@ def run(storyboard: dict, args, only) -> None:
                 common.mock_tone(target, seconds=seconds, freq=196.0, gain_db=-30)
                 cost = 0.0
             else:
+                # The free tier caps TTS at ten requests a day per model, and
+                # overloads show up as finishReason OTHER. Pace the requests so a
+                # partial build resumes where it stopped instead of burning quota.
+                wait = PACE_S - (time.monotonic() - last_call)
+                if wait > 0:
+                    time.sleep(wait)
+                last_call = time.monotonic()
                 raw, cost = providers.gemini_speech(
                     text=script["text"], voice_id=voice["voice_id"],
                     instruction=voice["instruction"], model=model,
