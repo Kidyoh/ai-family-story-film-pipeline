@@ -147,16 +147,17 @@ def try_video(storyboard: dict, shot: dict, keyframe, duration: float, seed: int
     temp = out_path("clips", f"{shot['id']}.raw.mp4")
     used = None
     try:
-        if common.secrets_present()["CLOUDFLARE_API_TOKEN"] and os.environ.get("CF_VIDEO_MODEL"):
+        used = providers.video_source()
+        if used == "cloudflare":
             raw, cost = providers.cloudflare_video(image=image, motion=motion, seconds=duration, seed=seed)
-            used = "cloudflare"
-        elif os.environ.get("WAN_ENDPOINT"):
+        elif used == "wan-endpoint":
             raw, cost = providers.wan_endpoint_video(image=image, motion=motion, seconds=duration, seed=seed)
-            used = "wan-endpoint"
-        elif providers.hf_token_present():
+        elif used == "openrouter":
+            raw, cost = providers.openrouter_video(image=image, motion=motion, seconds=duration, seed=seed,
+                                                   negative=VIDEO_NEGATIVE)
+        elif used == "huggingface":
             raw, cost = providers.hf_video(image=image, motion=motion, seconds=duration, seed=seed,
                                            negative=VIDEO_NEGATIVE)
-            used = "huggingface"
         else:
             raise providers.ProviderError("no video endpoint configured")
     except providers.ProviderError as exc:
@@ -171,7 +172,7 @@ def try_video(storyboard: dict, shot: dict, keyframe, duration: float, seed: int
                        status="empty-response", shot_id=shot["id"])
         return None
     common.log_run(stage="shots", operation="video", provider=used,
-                   model="wan", status="ok", shot_id=shot["id"],
+                   model=os.environ.get("OPENROUTER_VIDEO_MODEL") or providers.OPENROUTER_VIDEO_MODEL if used == "openrouter" else "wan", status="ok", shot_id=shot["id"],
                    seed=seed, cost_usd_estimate=round(cost, 4), bytes=temp.stat().st_size)
     return temp
 
@@ -203,10 +204,9 @@ def run(storyboard: dict, args, only) -> None:
         key = common.artifact_key(
             "clip", shot["id"], common.sha256_file(keyframe), duration, shot["mode"], kb,
             shot.get("motion"), mode, RENDERER,
-            # Changes when a video endpoint appears, so a fallback still is not
-            # kept as "fresh" once real motion becomes available.
-            bool(os.environ.get("CF_VIDEO_MODEL") or os.environ.get("WAN_ENDPOINT")
-                 or providers.hf_token_present()) if shot["mode"] == "wan" else None,
+            # Changes when a video source appears or changes, so a fallback
+            # still is not kept as "fresh" once real motion becomes available.
+            providers.video_source() if shot["mode"] == "wan" and mode == "real" else None,
         )
         if common.is_fresh(target, key) and not args.force:
             print(f"  {shot['id']}: cached")
@@ -238,8 +238,7 @@ def run(storyboard: dict, args, only) -> None:
                 common.log_run(stage="shots", operation="render", provider="local", model="ffmpeg",
                                status="fallback", shot_id=shot["id"], seconds=duration,
                                mode="kenburns", note="no video endpoint; keyframe animated in FFmpeg")
-        configured = bool(os.environ.get("CF_VIDEO_MODEL") or os.environ.get("WAN_ENDPOINT")
-                          or providers.hf_token_present())
+        configured = providers.video_source() is not None
         # A still rendered because a configured video model failed is not
         # cached, so the next run tries the model again.
         if rendered or not (shot["mode"] == "wan" and mode == "real" and configured):

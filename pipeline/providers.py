@@ -480,6 +480,226 @@ def hf_audio(*, prompt: str, seconds: float, seed: int, negative: str = "") -> t
 
 
 # --------------------------------------------------------------------------
+# OpenRouter (video and music, under a spending cap)
+# --------------------------------------------------------------------------
+#
+# One OPENROUTER_API_KEY reaches hosted video models through OpenRouter's video
+# API (submit, poll, download) and Google's Lyria music model through chat
+# completions. These are proprietary models, not open weights.
+#
+# Every call is checked against OPENROUTER_BUDGET_USD first. The amount already
+# spent is read from runs.jsonl, so the cap holds across runs and stages; a
+# call that would cross it raises, and the stage falls back.
+
+OPENROUTER = "https://openrouter.ai/api/v1"
+OPENROUTER_VIDEO_MODEL = "google/veo-3.1-lite"
+OPENROUTER_MUSIC_MODEL = "google/lyria-3-clip-preview"
+OPENROUTER_MUSIC_PRICE = 0.04   # per clip of up to 30 s, from the model page
+OPENROUTER_MUSIC_MAX_S = 30.0
+OPENROUTER_DEFAULT_BUDGET = 2.00
+_OPENROUTER_VIDEO: dict[str, dict] = {}
+
+
+def openrouter_key_present() -> bool:
+    common.load_env()
+    return bool(os.environ.get("OPENROUTER_API_KEY", "").strip())
+
+
+def _openrouter_headers() -> dict:
+    common.load_env()
+    key = os.environ.get("OPENROUTER_API_KEY", "").strip()
+    if not key:
+        raise ProviderError("OPENROUTER_API_KEY is not set")
+    return {"Authorization": f"Bearer {key}"}
+
+
+def openrouter_budget() -> float:
+    common.load_env()
+    try:
+        return float(os.environ.get("OPENROUTER_BUDGET_USD", "") or OPENROUTER_DEFAULT_BUDGET)
+    except ValueError:
+        return OPENROUTER_DEFAULT_BUDGET
+
+
+def _openrouter_reserve(estimate: float, label: str) -> None:
+    """Refuse a call that would take OpenRouter spending past the cap."""
+    spent, cap = common.spent_usd("openrouter"), openrouter_budget()
+    if spent + estimate > cap + 1e-9:
+        raise ProviderError(
+            f"{label}: about ${estimate:.2f} would take OpenRouter spending to "
+            f"${spent + estimate:.2f}, over the ${cap:.2f} cap (OPENROUTER_BUDGET_USD)"
+        )
+
+
+def _openrouter_video_model(model: str) -> dict:
+    """The model's own list of durations, resolutions and prices."""
+    if model not in _OPENROUTER_VIDEO:
+        response = _hf_check(requests.get(f"{OPENROUTER}/videos/models", timeout=60), "openrouter video models")
+        for entry in response.json().get("data", []):
+            _OPENROUTER_VIDEO[entry["id"]] = entry
+    if model not in _OPENROUTER_VIDEO:
+        raise ProviderError(f"{model} is not an OpenRouter video model")
+    return _OPENROUTER_VIDEO[model]
+
+
+def _video_price_per_second(info: dict, resolution: str) -> float:
+    """Silent-video price for a resolution, from whichever key the model uses."""
+    skus = info.get("pricing_skus") or {}
+    for name, scale in (
+        (f"duration_seconds_without_audio_{resolution}", 1.0),
+        (f"duration_seconds_{resolution}", 1.0),
+        (f"cents_per_video_output_second_{resolution}", 0.01),
+        ("duration_seconds_without_audio", 1.0),
+        ("duration_seconds", 1.0),
+        ("cents_per_second_output", 0.01),
+    ):
+        if name in skus:
+            return float(skus[name]) * scale
+    return 0.15  # unknown pricing: assume expensive, so the cap errs safe
+
+
+def openrouter_video(*, image: bytes, motion: str, seconds: float, seed: int,
+                     negative: str = "") -> tuple[bytes, float]:
+    """Image-to-video through OpenRouter, the keyframe as the first frame."""
+    common.load_env()
+    model = os.environ.get("OPENROUTER_VIDEO_MODEL", "").strip() or OPENROUTER_VIDEO_MODEL
+    resolution = os.environ.get("OPENROUTER_VIDEO_RESOLUTION", "").strip() or "720p"
+    info = _openrouter_video_model(model)
+    if "first_frame" not in (info.get("supported_frame_images") or []):
+        raise ProviderError(f"{model} cannot start a video from an image")
+    if resolution not in (info.get("supported_resolutions") or [resolution]):
+        raise ProviderError(f"{model} does not offer {resolution}")
+    # The shortest clip the model offers that covers the shot; if none does,
+    # the longest, and the conform step slows it to fit.
+    offered = sorted(d for d in (info.get("supported_durations") or []) if d and d > 0) or [int(round(seconds))]
+    duration = next((d for d in offered if d >= seconds - 0.05), offered[-1])
+    estimate = _video_price_per_second(info, resolution) * duration
+    _openrouter_reserve(estimate, f"video {duration}s")
+
+    # A JPEG keeps the request small; the model resamples the frame anyway.
+    staged = common.out_path("tmp", f"frame_{seed}.png")
+    staged.write_bytes(image)
+    jpeg = staged.with_suffix(".jpg")
+    try:
+        common.ff("-i", staged, "-frames:v", "1", "-q:v", "2", jpeg)
+        frame = base64.b64encode(jpeg.read_bytes()).decode("ascii")
+    finally:
+        staged.unlink(missing_ok=True)
+        jpeg.unlink(missing_ok=True)
+
+    payload = {
+        "model": model,
+        "prompt": motion + (f". Avoid: {negative}" if negative else ""),
+        "duration": duration,
+        "resolution": resolution,
+        "aspect_ratio": "9:16",
+        "generate_audio": False,
+        "frame_images": [{"type": "image_url", "frame_type": "first_frame",
+                          "image_url": {"url": f"data:image/jpeg;base64,{frame}"}}],
+    }
+    if info.get("seed"):
+        payload["seed"] = seed
+    headers = _openrouter_headers()
+
+    def submit() -> dict:
+        return _hf_check(requests.post(f"{OPENROUTER}/videos", headers=headers, json=payload, timeout=180),
+                         "openrouter video").json()
+
+    # Only the submission is retried: an accepted job is paid for.
+    job = with_retries(submit, attempts=2, label="openrouter video")
+    deadline = time.monotonic() + 1500
+    while job.get("status") != "completed":
+        if job.get("status") in {"failed", "cancelled", "expired"}:
+            raise ProviderError(f"openrouter video {job.get('status')}: {str(job.get('error'))[:300]}")
+        if time.monotonic() > deadline or not job.get("polling_url"):
+            raise ProviderError(f"openrouter video did not finish (job {job.get('id')}, {job.get('status')})")
+        time.sleep(10)
+        url = requests.compat.urljoin("https://openrouter.ai", job["polling_url"])
+        job = _hf_check(requests.get(url, headers=headers, timeout=60), "openrouter video status").json()
+
+    cost = (job.get("usage") or {}).get("cost")
+    unsigned = (job.get("unsigned_urls") or [None])[0]
+    if unsigned:
+        # Pre-signed: it must not be sent the key.
+        response = requests.get(unsigned, timeout=600)
+    else:
+        response = requests.get(f"{OPENROUTER}/videos/{job['id']}/content", params={"index": 0},
+                                headers=headers, timeout=600)
+    raw = _hf_check(response, "openrouter video download").content
+    return raw, float(cost) if cost is not None else estimate
+
+
+def openrouter_music(*, prompt: str, seconds: float, seed: int) -> tuple[bytes, float]:
+    """One instrumental clip from Lyria. Clips are at most thirty seconds."""
+    common.load_env()
+    if seconds > OPENROUTER_MUSIC_MAX_S:
+        raise ProviderError(f"cue needs {seconds:.0f}s, and a Lyria clip is {OPENROUTER_MUSIC_MAX_S:.0f}s at most")
+    model = os.environ.get("OPENROUTER_MUSIC_MODEL", "").strip() or OPENROUTER_MUSIC_MODEL
+    _openrouter_reserve(OPENROUTER_MUSIC_PRICE, "music clip")
+    payload = {
+        "model": model,
+        "messages": [{"role": "user", "content": f"{prompt}. Instrumental only, no vocals. "
+                                                 f"About {seconds:.0f} seconds long."}],
+        "modalities": ["text", "audio"],
+        "audio": {"format": "wav"},
+        "seed": seed,
+        "stream": True,  # OpenRouter delivers audio output only as a stream
+    }
+
+    def call() -> bytes:
+        response = requests.post(f"{OPENROUTER}/chat/completions", headers=_openrouter_headers(),
+                                 json=payload, stream=True, timeout=600)
+        _hf_check(response, "openrouter music")
+        response.encoding = "utf-8"
+        chunks = []
+        for line in response.iter_lines(decode_unicode=True):
+            if not line or not line.startswith("data: "):
+                continue
+            data = line[len("data: "):]
+            if data.strip() == "[DONE]":
+                break
+            try:
+                event = json.loads(data)
+            except json.JSONDecodeError:
+                continue
+            if event.get("error"):
+                raise ProviderError(f"openrouter music: {json.dumps(event['error'])[:300]}")
+            for choice in event.get("choices") or []:
+                audio = (choice.get("delta") or {}).get("audio") or {}
+                if audio.get("data"):
+                    chunks.append(audio["data"])
+        if not chunks:
+            raise ProviderError("openrouter music returned no audio")
+        return base64.b64decode("".join(chunks))
+
+    raw = with_retries(call, attempts=2, label="openrouter music")
+    if raw[:4] not in (b"RIFF", b"OggS", b"fLaC") and raw[:3] != b"ID3" and raw[:2] != b"\xff\xfb":
+        # Headerless samples. Lyria is documented as 48 kHz stereo.
+        buffer = io.BytesIO()
+        with wave.open(buffer, "wb") as handle:
+            handle.setnchannels(2)
+            handle.setsampwidth(2)
+            handle.setframerate(48000)
+            handle.writeframes(raw)
+        raw = buffer.getvalue()
+    return raw, OPENROUTER_MUSIC_PRICE
+
+
+def video_source() -> str | None:
+    """Which video generator a real build would use, in order of preference."""
+    common.load_env()
+    if os.environ.get("CLOUDFLARE_API_TOKEN") and os.environ.get("CF_VIDEO_MODEL", "").strip():
+        return "cloudflare"
+    if os.environ.get("WAN_ENDPOINT", "").strip():
+        return "wan-endpoint"
+    if openrouter_key_present():
+        return "openrouter"
+    if hf_token_present():
+        return "huggingface"
+    return None
+
+
+# --------------------------------------------------------------------------
 # ACE-Step (music)
 # --------------------------------------------------------------------------
 

@@ -211,6 +211,20 @@ def log_run(
             handle.write(json.dumps(record, ensure_ascii=False) + "\n")
 
 
+def spent_usd(provider: str) -> float:
+    """What runs.jsonl says has been spent with one provider so far."""
+    total = 0.0
+    if RUNS_PATH.exists():
+        for line in RUNS_PATH.read_text(encoding="utf-8").splitlines():
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if record.get("provider") == provider and not record.get("cached"):
+                total += float(record.get("cost_usd_estimate") or 0.0)
+    return total
+
+
 # --------------------------------------------------------------------------
 # retries
 # --------------------------------------------------------------------------

@@ -116,6 +116,13 @@ Only implemented once each, in `pipeline/providers.py`.
   multipart: `image` file, form fields `prompt`, `seconds`, `seed`, mp4 back.
 - **Music**: `MUSIC_ENDPOINT`, JSON POST `{caption, lyrics, duration, bpm, key,
   seed}`, audio bytes or `{"audio": "<base64>"}` back.
+- **OpenRouter**: `OPENROUTER_API_KEY` reaches a hosted video model (default
+  Veo 3.1 Lite, the keyframe as `first_frame`, silent, 9:16) through the video
+  API, and Lyria music through streamed chat completions. It comes after
+  `CF_VIDEO_MODEL` and `WAN_ENDPOINT` for video and after `MUSIC_ENDPOINT` for
+  music. Each call's price is estimated from the model's published rates and
+  checked against `OPENROUTER_BUDGET_USD` plus what `runs.jsonl` already
+  records; a call over the cap is refused and the stage falls back.
 - **Hugging Face**: `HF_TOKEN` reaches open-weight models through Hugging Face
   Inference Providers (the fal-ai partner's queue: submit, poll, fetch). It is
   the third choice for video (Wan 2.2 i2v, requested at the shot's own length),

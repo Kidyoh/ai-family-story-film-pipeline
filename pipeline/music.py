@@ -68,6 +68,8 @@ def music_source() -> str:
     common.load_env()
     if os.environ.get("MUSIC_ENDPOINT", "").strip():
         return "ace-step"
+    if providers.openrouter_key_present():
+        return "lyria"
     return "stable-audio" if providers.hf_token_present() else "none"
 
 
@@ -133,7 +135,13 @@ def run(storyboard: dict, args, only) -> None:
             if mode == "real":
                 try:
                     common.load_env()
-                    if os.environ.get("MUSIC_ENDPOINT", "").strip() or not providers.hf_token_present():
+                    used = music_source()
+                    if used == "lyria":
+                        raw, cost = providers.openrouter_music(
+                            prompt=f"{cue['caption']}, {cue.get('bpm', 80)} bpm, {cue.get('key', 'C minor')}",
+                            seconds=window["render"], seed=1000 + index,
+                        )
+                    elif used != "stable-audio":
                         used = "ace-step"
                         raw, cost = providers.ace_step(
                             caption=cue["caption"], seconds=window["render"],
@@ -142,7 +150,6 @@ def run(storyboard: dict, args, only) -> None:
                     else:
                         # Stable Audio has no tempo or key fields, so they go
                         # into the words.
-                        used = "stable-audio"
                         raw, cost = providers.hf_audio(
                             prompt=f"{cue['caption']}, {cue.get('bpm', 80)} bpm, {cue.get('key', 'C minor')}",
                             seconds=window["render"], seed=1000 + index,
@@ -157,7 +164,8 @@ def run(storyboard: dict, args, only) -> None:
                               "-c:a", "pcm_s16le", target)
                     staged.unlink(missing_ok=True)
                     common.log_run(stage="music", operation="music",
-                                   provider="huggingface" if used == "stable-audio" else "ace-step", model=used,
+                                   provider={"stable-audio": "huggingface", "lyria": "openrouter"}.get(used, "ace-step"),
+                                   model=used,
                                    status="ok", cue_id=cue["id"], candidate=index,
                                    cost_usd_estimate=round(cost, 4))
                 except providers.ProviderError as exc:
