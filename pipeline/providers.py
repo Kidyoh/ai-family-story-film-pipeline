@@ -78,12 +78,17 @@ def _first_inline(data: dict) -> tuple[str, bytes]:
     raise ProviderError("gemini returned no inline media")
 
 
-def gemini_speech(*, text: str, voice_id: str, instruction: str, model: str | None = None) -> tuple[bytes, float]:
+LANGUAGE_NAMES = {"am": "Amharic", "en": "English", "om": "Afaan Oromo", "ti": "Tigrinya"}
+
+
+def gemini_speech(*, text: str, voice_id: str, instruction: str, model: str | None = None,
+                  language: str = "am") -> tuple[bytes, float]:
     """Text-to-speech in the film's language, returned as a 24 kHz mono WAV."""
     common.load_env()
     model = model or os.environ.get("GEMINI_TTS_MODEL", "gemini-2.5-flash-preview-tts")
+    spoken = LANGUAGE_NAMES.get(language, language)
     prompt = (
-        f"Read the following Amharic line aloud exactly as written. Do not translate it, "
+        f"Read the following {spoken} line aloud exactly as written. Do not translate it, "
         f"do not add words. Style: {instruction}. Line: {text}"
     )
     payload = {
@@ -131,6 +136,7 @@ def gemini_image(
     aspect_ratio: str,
     reference: Path | None,
     model: str | None = None,
+    reference_is_sheet: bool = False,
 ) -> tuple[bytes, float]:
     """Keyframe generation. With a reference photo this is an edit request
     ('use this face structure, repaint in the style'), which is what keeps the
@@ -149,6 +155,11 @@ def gemini_image(
         })
         parts.append({
             "text": (
+                "This image is a painted character reference sheet. Paint the same person - same "
+                "face, hair, skin tone and clothing - in the scene below, in the same painted "
+                "style. Do not copy the sheet's pose or plain background.\n\n"
+                f"Scene: {prompt}\n\nAvoid: {negative}"
+            ) if reference_is_sheet else (
                 "Repaint this photograph as a hand-painted illustration. Keep the person's face "
                 "structure, brow, nose and the age in their features; change the lighting, "
                 "clothing and setting to match the scene below. Do not copy the photograph's "
@@ -180,17 +191,22 @@ def _cloudflare_creds() -> tuple[str, str]:
     return token, account
 
 
-def _reference_tile(reference: Path) -> bytes:
-    """The reference photo as a 512px JPEG tile.
+def _reference_tile(reference: Path, *, fit: bool = False) -> bytes:
+    """A reference image as a 512px JPEG tile.
 
     FLUX.2 edits from reference images rather than copying them, and it caps
     each input at 512px, so only a face-sized tile ever leaves this machine.
     Sending the full photograph would add cost and privacy exposure for detail
     the painting does not use.
+
+    A photograph is centre-cropped to a square. A painted character sheet is
+    9:16 with the face in the upper third, so `fit` scales it down whole
+    instead of cropping the head off.
     """
     tile = common.out_path("tmp", f"reference_{reference.stem}.jpg")
-    common.ff("-i", reference,
-              "-vf", "scale=512:512:force_original_aspect_ratio=increase,crop=512:512",
+    scale = ("scale=512:512:force_original_aspect_ratio=decrease:force_divisible_by=2" if fit
+             else "scale=512:512:force_original_aspect_ratio=increase,crop=512:512")
+    common.ff("-i", reference, "-vf", scale,
               "-frames:v", "1", "-q:v", "3", tile)
     try:
         return tile.read_bytes()
@@ -200,6 +216,7 @@ def _reference_tile(reference: Path) -> bytes:
 
 def cloudflare_image(*, prompt: str, negative: str, width: int, height: int, seed: int,
                      reference: Path | None = None,
+                     sheets: list[Path] | None = None,
                      model: str | None = None) -> tuple[bytes, float]:
     """FLUX.2 on Workers AI: text-to-image, or an edit when a reference is given.
 
@@ -209,20 +226,28 @@ def cloudflare_image(*, prompt: str, negative: str, width: int, height: int, see
     of being cropped out of a square. The 4B model is the default because the
     9B one costs about five times more and would exhaust the daily free
     allowance after roughly six frames.
+
+    `reference` is a photograph (centre-cropped); `sheets` are painted
+    character sheets (fitted whole). Together they fill input_image_0..3.
+
+    FLUX has no negative prompt. Text after "Avoid:" is read as more prompt, so
+    naming "extra fingers" or "watermark" asks for them; the negative list is
+    accepted for interface parity with Gemini and deliberately not sent.
     """
     common.load_env()
     model = model or os.environ.get("CF_IMAGE_MODEL", "@cf/black-forest-labs/flux-2-klein-4b")
     token, account = _cloudflare_creds()
     url = f"https://api.cloudflare.com/client/v4/accounts/{account}/ai/run/{model}"
     fields: list[tuple[str, tuple]] = [
-        ("prompt", (None, f"{prompt}\n\nAvoid: {negative}")),
+        ("prompt", (None, prompt)),
         ("width", (None, str(width))),
         ("height", (None, str(height))),
         ("seed", (None, str(seed))),
     ]
-    if reference is not None:
-        fields.append(("input_image_0",
-                       ("reference.jpg", _reference_tile(reference), "image/jpeg")))
+    tiles = [_reference_tile(reference)] if reference is not None else []
+    tiles += [_reference_tile(sheet, fit=True) for sheet in (sheets or [])]
+    for index, tile in enumerate(tiles[:4]):
+        fields.append((f"input_image_{index}", (f"reference_{index}.jpg", tile, "image/jpeg")))
 
     def call():
         response = requests.post(url, headers={"Authorization": f"Bearer {token}"},

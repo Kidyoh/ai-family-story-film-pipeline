@@ -191,8 +191,11 @@ def mix_audio(storyboard: dict) -> None:
     common.ff(
         "-i", score, "-i", voice,
         "-filter_complex",
-        f"[1:a]asplit[voice][key];"
-        f"[0:a][key]sidechaincompress=threshold={duck['threshold']}:ratio={duck['ratio']}"
+        # The voice is 24 kHz mono and the score 48 kHz stereo: put both on
+        # one grid before the compressor keys one off the other.
+        f"[1:a]aresample=48000,aformat=channel_layouts=stereo,asplit[voice][key];"
+        f"[0:a]aresample=48000,aformat=channel_layouts=stereo[score];"
+        f"[score][key]sidechaincompress=threshold={duck['threshold']}:ratio={duck['ratio']}"
         f":attack={duck['attack_ms']}:release={duck['release_ms']}:makeup=1[ducked];"
         f"[ducked][voice]amix=inputs=2:duration=longest:normalize=0[premix];"
         f"[premix]atrim=0:{measure_duration(voice):.3f},aresample=48000[mix]",

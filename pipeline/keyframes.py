@@ -47,6 +47,16 @@ def reference_for(storyboard: dict, character_id: str, *, shot_id: str) -> Path 
     return path
 
 
+def sheet_for(storyboard: dict, character_id: str) -> Path | None:
+    """The character's painted sheet, if this build has generated one."""
+    character = next(c for c in storyboard["characters"] if c["id"] == character_id)
+    declared = character.get("reference_sheet")
+    if not declared:
+        return None
+    path = ROOT / declared
+    return path if path.exists() and path.stat().st_size else None
+
+
 def mock_frame(storyboard: dict, shot: dict, target: Path) -> None:
     common.mock_image(
         target, shot_id=shot["id"], scene=shot["scene"],
@@ -61,8 +71,9 @@ def run(storyboard: dict, args, only) -> None:
     if not palette_ok:
         print("  ! no palette in the storyboard; keyframes will be less consistent")
 
-    # Reference sheets: the golden look, generated once, then reused by shots.py
-    # when it needs to animate a character. They are also the artifact a human
+    # Reference sheets: the golden look, generated once, then sent back as an
+    # image reference with every shot the character appears in, which is what
+    # keeps one face across twelve frames. They are also the artifact a human
     # reviewer checks before spending money on video.
     for character in storyboard["characters"]:
         sheet = ROOT / (character.get("reference_sheet") or f"outputs/refs/{character['id']}_sheet.png")
@@ -90,15 +101,20 @@ def run(storyboard: dict, args, only) -> None:
         target = out_path("keyframes", f"{shot['id']}.png")
         prompt = build_prompt(storyboard, shot)
         reference = None
+        sheets: list[Path] = []
         if shot["keyframe"].get("use_reference", True):
             for character_id in shot["keyframe"].get("characters", []):
-                reference = reference_for(storyboard, character_id, shot_id=shot["id"])
-                if reference:
-                    break
+                if reference is None:
+                    reference = reference_for(storyboard, character_id, shot_id=shot["id"])
+                # Mock frames ignore references, so keep the mock cache stable.
+                sheet = sheet_for(storyboard, character_id) if mode == "real" else None
+                if sheet:
+                    sheets.append(sheet)
         key = common.artifact_key(
             "keyframe", shot["id"], prompt, storyboard["style"]["negative"], shot["keyframe"].get("seed"),
             str(reference) if reference else None,
             common.sha256_file(reference) if reference else None, mode,
+            *[common.sha256_file(sheet) for sheet in sheets],
         )
         if common.is_fresh(target, key) and not args.force:
             print(f"  {shot['id']}: cached")
@@ -106,17 +122,19 @@ def run(storyboard: dict, args, only) -> None:
                            status="ok", cached=True, shot_id=shot["id"])
             continue
         if args.dry_run:
-            print(f"  {shot['id']}: would generate ({'with' if reference else 'without'} reference)")
+            print(f"  {shot['id']}: would generate ({'with' if reference or sheets else 'without'} reference)")
             continue
-        print(f"  {shot['id']}: painting{' from the family photograph' if reference else ''} ...")
+        source = " from the family photograph" if reference else (" from the character sheet" if sheets else "")
+        print(f"  {shot['id']}: painting{source} ...")
         generate(storyboard, prompt=prompt, target=target, seed=shot["keyframe"].get("seed", 1),
-                 reference=reference, shot_id=shot["id"], stage="keyframes", mode=mode,
+                 reference=reference, sheets=sheets, shot_id=shot["id"], stage="keyframes", mode=mode,
                  scene=shot["scene"])
         common.mark_fresh(target, key)
 
 
 def generate(storyboard: dict, *, prompt: str, target: Path, seed: int, reference: Path | None,
-             shot_id: str, stage: str, mode: str, scene: str = "A") -> None:
+             shot_id: str, stage: str, mode: str, scene: str = "A",
+             sheets: list[Path] | None = None) -> None:
     """Generate one image, choosing the provider by what the request needs.
 
     FLUX.2 on Cloudflare handles both cases and is the default: it accepts
@@ -139,15 +157,19 @@ def generate(storyboard: dict, *, prompt: str, target: Path, seed: int, referenc
     common.load_env()
     use_gemini = not common.secrets_present()["CLOUDFLARE_API_TOKEN"]
     if use_gemini:
+        # Gemini takes one reference here: the photograph if there is one,
+        # otherwise the character's painted sheet.
+        sheet = sheets[0] if sheets and reference is None else None
         raw, cost = providers.gemini_image(
-            prompt=prompt, negative=negative, aspect_ratio="9:16", reference=reference,
+            prompt=prompt, negative=negative, aspect_ratio="9:16", reference=reference or sheet,
+            reference_is_sheet=sheet is not None,
         )
         model = os.environ.get("GEMINI_IMAGE_MODEL", "gemini-2.5-flash-image")
         provider_name = "gemini"
     else:
         raw, cost = providers.cloudflare_image(
             prompt=prompt, negative=negative, width=FRAME[0], height=FRAME[1],
-            seed=seed, reference=reference,
+            seed=seed, reference=reference, sheets=sheets,
         )
         model = os.environ.get("CF_IMAGE_MODEL", "@cf/black-forest-labs/flux-2-klein-4b")
         provider_name = "cloudflare"
@@ -162,6 +184,7 @@ def generate(storyboard: dict, *, prompt: str, target: Path, seed: int, referenc
     common.log_run(stage=stage, operation="image", provider=provider_name,
                    model=model, status="ok", shot_id=shot_id, seed=seed,
                    reference=rel(reference) if reference else None,
+                   sheets=[rel(sheet) for sheet in sheets] if sheets else None,
                    cost_usd_estimate=round(cost, 4), bytes=target.stat().st_size)
 
 

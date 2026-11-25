@@ -223,7 +223,7 @@ def with_retries(fn, *, attempts: int = 3, base_delay: float = 2.0, label: str =
     """Retry with exponential backoff, jitter, and a bounded total wait.
 
     Retries are for transient failures (429, 5xx, timeouts). A 400 is a bug in
-    the prompt or the payload and is raised immediately.
+    the prompt or the payload and is raised immediately, as a ProviderError.
     """
     last: Exception | None = None
     for attempt in range(1, attempts + 1):
@@ -233,7 +233,10 @@ def with_retries(fn, *, attempts: int = 3, base_delay: float = 2.0, label: str =
             last = exc
             status = getattr(getattr(exc, "response", None), "status_code", None)
             if status is not None and 400 <= status < 500 and status != 429:
-                raise
+                # Not retryable, but still a provider failure: raise the type
+                # the stages catch, so an optional capability can fall back and
+                # a required one exits with a message instead of a traceback.
+                raise ProviderError(f"{label or 'call'} rejected: {exc}") from exc
             if attempt == attempts:
                 break
             delay = base_delay * (2 ** (attempt - 1)) + random.uniform(0, 0.75)

@@ -58,7 +58,7 @@ semantic inputs, not of the clock or the file's mtime:
 | artifact | key includes |
 |---|---|
 | narration | shot id, Amharic text, voice id, style instruction, model, mode |
-| keyframe | assembled prompt, negative prompt, seed, reference photo hash, mode |
+| keyframe | assembled prompt, negative prompt, seed, reference photo hash, character sheet hashes, mode |
 | character sheet | description, style block, reference photo hash |
 | clip | keyframe hash, duration, mode, Ken Burns params, motion text, renderer version |
 | cue candidate | caption, duration, bpm, key, candidate index, mode |

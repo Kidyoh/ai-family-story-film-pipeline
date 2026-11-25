@@ -128,7 +128,8 @@
       "keyframe": {
         "prompt": "interior hut wall at night, the huge distorted shadow of an older man's head and shoulders thrown across the mud wall by a kerosene lamp, a heavy hand reaching toward a folded red wedding shawl on a stool, the girl's small shadow crouched at the edge of the frame, warm amber against cold dark",
         "seed": 31004,
-        "characters": ["girl"]
+        "characters": ["girl"],
+        "use_reference": false
       },
       "narration": {
         "voice": "narrator",
@@ -175,7 +176,8 @@
       "keyframe": {
         "prompt": "extreme close-up of a girl's bare feet on a wet stone mountain path, a thorn scratch and a smear of blood on one heel, dew beading on grass at the frame edge, mud on the hem of a white cotton dress, cold grey-blue dawn light",
         "seed": 31006,
-        "characters": ["girl"]
+        "characters": ["girl"],
+        "use_reference": false
       },
       "narration": {
         "voice": "narrator",
@@ -312,7 +314,8 @@
       "keyframe": {
         "prompt": "close-up of two hands resting together in a lap, an old woman's hand with faded henna and a pale scar across the knuckles held by a younger hand with a thin silver ring, white netela and dark green cloth at the frame edge, honey lamplight, steam drifting through the light",
         "seed": 31012,
-        "characters": ["grandmother"]
+        "characters": ["grandmother"],
+        "use_reference": false
       },
       "narration": {
         "voice": "narrator",

@@ -97,15 +97,35 @@ def render_kenburns(source, target, *, duration: float, zoom_from: float, zoom_t
     )
 
 
+MAX_STRETCH = 2.0  # beyond this, slow motion stops reading as intended
+
+
 def conform(source, target, *, duration: float, loop: bool) -> None:
-    """Force a generated clip onto the film's grid: 1080x1920, 24 fps, exact length."""
+    """Force a generated clip onto the film's grid: 1080x1920, 24 fps, exact length.
+
+    Video models return about five seconds at 16 fps, and narration makes most
+    shots longer than that. Looping the clip puts a visible jump in the middle
+    of the shot, so a short clip is slowed to fill the shot instead, with
+    motion-interpolated frames. Smoke, fog and steam survive slow motion well.
+    Only a clip that would need more than MAX_STRETCH is looped.
+    """
     args = ["-i", source]
-    if loop:
+    retime = f"fps={FPS}"
+    length = max(0.1, common.probe_duration(source))
+    stretch = duration / length
+    if 1.0 < stretch <= MAX_STRETCH and common.has_filter("minterpolate"):
+        # The interpolator drops a few frames at the end of the clip, so aim
+        # 0.4 s past the slot and let -t cut it exactly. A clip that came out
+        # short would let the picture drift against the narration.
+        retime = (f"setpts={(duration + 0.4) / length:.4f}*PTS,"
+                  f"minterpolate=fps={FPS}:mi_mode=mci:mc_mode=aobmc:vsbmc=1")
+    elif stretch > 1.0 and loop:
         args = ["-stream_loop", "-1", "-i", source]
     common.ff(
         *args, "-t", round(duration, 3),
         "-vf", f"scale={WIDTH}:{HEIGHT}:force_original_aspect_ratio=increase,"
-               f"crop={WIDTH}:{HEIGHT},fps={FPS},format=yuv420p",
+               f"crop={WIDTH}:{HEIGHT},{retime},"
+               f"format=yuv420p",
         "-an", "-c:v", "libx264", "-preset", "veryfast", "-crf", "18",
         "-pix_fmt", "yuv420p", target,
     )
@@ -171,6 +191,9 @@ def run(storyboard: dict, args, only) -> None:
         key = common.artifact_key(
             "clip", shot["id"], common.sha256_file(keyframe), duration, shot["mode"], kb,
             shot.get("motion"), mode, RENDERER,
+            # Changes when a video endpoint appears, so a fallback still is not
+            # kept as "fresh" once real motion becomes available.
+            bool(os.environ.get("CF_VIDEO_MODEL") or os.environ.get("WAN_ENDPOINT")) if shot["mode"] == "wan" else None,
         )
         if common.is_fresh(target, key) and not args.force:
             print(f"  {shot['id']}: cached")

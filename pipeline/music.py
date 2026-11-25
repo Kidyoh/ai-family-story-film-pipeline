@@ -18,12 +18,20 @@ from __future__ import annotations
 
 import json
 import wave
+from array import array
 
 from . import common, providers
 from .common import out_path, rel, stage_cli
 
-SAMPLE_RATE = 24000
+# The score keeps the full band and stereo width a music model returns; the
+# narration is 24 kHz mono speech, and assemble.py brings the two together.
+SAMPLE_RATE = 48000
+CHANNELS = 2
 FADE = 1.2  # seconds of fade at each cue boundary
+# Every cue is rendered FADE seconds longer than its window, so its fade-out
+# plays under the next cue's fade-in: a crossfade instead of a dip to silence.
+# The last cue's tail rings out under the first end card.
+RENDERER = "score-v2"
 
 ROOT_NOTE = {
     "c": 130.81, "c#": 138.59, "db": 138.59, "d": 146.83, "d#": 155.56, "eb": 155.56,
@@ -44,7 +52,8 @@ def cue_windows(storyboard: dict, timing: dict) -> list[dict]:
         end = spans[cue["to_shot"]][1]
         if order.index(cue["to_shot"]) < order.index(cue["from_shot"]):
             common.die(f"cue {cue['id']} runs backwards in the shot order")
-        windows.append({"cue": cue, "start": start, "end": end, "duration": round(end - start, 2)})
+        windows.append({"cue": cue, "start": start, "end": end, "duration": round(end - start, 2),
+                        "render": round(end - start + FADE, 2)})
     return windows
 
 
@@ -69,7 +78,7 @@ def synth_cue(target, *, duration: float, bpm: int, key: str, gain_db: float) ->
         "lowpass=f=1600,aecho=0.7:0.5:180|360:0.35|0.18,"
         f"volume={gain_db}dB,"
         f"afade=t=in:d={FADE},afade=t=out:st={max(0.0, duration - FADE):.3f}:d={FADE}[bed]",
-        "-map", "[bed]", "-ac", "1", "-ar", SAMPLE_RATE, "-c:a", "pcm_s16le", target,
+        "-map", "[bed]", "-ac", CHANNELS, "-ar", SAMPLE_RATE, "-c:a", "pcm_s16le", target,
     )
 
 
@@ -99,8 +108,8 @@ def run(storyboard: dict, args, only) -> None:
         candidates = cue.get("candidates", 3)
         for index in range(1, candidates + 1):
             target = music_dir / f"{cue['id']}_candidate_{index}.wav"
-            key = common.artifact_key("music", cue["id"], cue["caption"], window["duration"],
-                                      cue.get("bpm"), cue.get("key"), index, mode)
+            key = common.artifact_key("music", cue["id"], cue["caption"], window["render"],
+                                      cue.get("bpm"), cue.get("key"), index, mode, RENDERER)
             if common.is_fresh(target, key) and not args.force:
                 print(f"  {cue['id']} #{index}: cached")
                 continue
@@ -108,14 +117,14 @@ def run(storyboard: dict, args, only) -> None:
             if mode == "real":
                 try:
                     raw, cost = providers.ace_step(
-                        caption=cue["caption"], seconds=window["duration"],
+                        caption=cue["caption"], seconds=window["render"],
                         bpm=cue.get("bpm", 80), key=cue.get("key", "C minor"), seed=1000 + index,
                     )
                     staged = music_dir / f"{cue['id']}_candidate_{index}.raw"
                     staged.write_bytes(raw)
                     common.ff("-i", staged, "-af", f"afade=t=in:d={FADE},"
-                                                   f"afade=t=out:st={max(0.0, window['duration'] - FADE):.3f}:d={FADE}",
-                              "-t", window["duration"], "-ac", "1", "-ar", SAMPLE_RATE,
+                                                   f"afade=t=out:st={max(0.0, window['render'] - FADE):.3f}:d={FADE}",
+                              "-t", window["render"], "-ac", CHANNELS, "-ar", SAMPLE_RATE,
                               "-c:a", "pcm_s16le", target)
                     staged.unlink(missing_ok=True)
                     common.log_run(stage="music", operation="music", provider="ace-step", model="ace-step",
@@ -125,19 +134,20 @@ def run(storyboard: dict, args, only) -> None:
                     print(f"    ! {exc}; writing the synthesised fallback instead")
                     common.log_run(stage="music", operation="music", provider="none", model="none",
                                    status="fallback", cue_id=cue["id"], candidate=index, note=str(exc))
-                    synth_cue(target, duration=window["duration"], bpm=cue.get("bpm", 80),
+                    synth_cue(target, duration=window["render"], bpm=cue.get("bpm", 80),
                               key=cue.get("key", "C minor"), gain_db=cue.get("gain_db", -6))
             else:
-                synth_cue(target, duration=window["duration"], bpm=cue.get("bpm", 80),
+                synth_cue(target, duration=window["render"], bpm=cue.get("bpm", 80),
                           key=cue.get("key", "C minor"), gain_db=cue.get("gain_db", -6))
                 common.log_run(stage="music", operation="music", provider="mock", model="synth",
                                status="ok", cue_id=cue["id"], candidate=index)
             common.mark_fresh(target, key)
 
-    # Assemble the bed: cues placed on the timeline, faded at both ends, so the
-    # scene changes are felt as a breath rather than heard as a splice.
+    # Assemble the bed: cues are summed onto the timeline, each one's fade-out
+    # overlapping the next one's fade-in, so a scene change is a crossfade
+    # rather than a splice or a hole.
     total = timing["total_s"]
-    buffer = bytearray(int(round(total * SAMPLE_RATE)) * 2)
+    buffer = array("h", bytes(int(round(total * SAMPLE_RATE)) * CHANNELS * 2))
     for window in windows:
         cue = window["cue"]
         pick = chosen.get(cue["id"], f"{cue['id']}_candidate_1.wav")
@@ -146,17 +156,20 @@ def run(storyboard: dict, args, only) -> None:
             print(f"  ! {cue['id']}: {pick} does not exist, skipping the cue")
             continue
         with wave.open(str(path), "rb") as handle:
-            pcm = handle.readframes(handle.getnframes())
-        offset = int(round(window["start"] * SAMPLE_RATE)) * 2
+            if (handle.getnchannels(), handle.getsampwidth(), handle.getframerate()) != (CHANNELS, 2, SAMPLE_RATE):
+                common.die(f"{rel(path)} is not {SAMPLE_RATE} Hz stereo 16-bit; re-run `make music --force`")
+            pcm = array("h", handle.readframes(handle.getnframes()))
+        offset = int(round(window["start"] * SAMPLE_RATE)) * CHANNELS
         end = min(len(buffer), offset + len(pcm))
-        buffer[offset:end] = pcm[: end - offset]
+        for position in range(offset, end):
+            buffer[position] = max(-32768, min(32767, buffer[position] + pcm[position - offset]))
 
     score = out_path("audio", "score.wav")
     with wave.open(str(score), "wb") as handle:
-        handle.setnchannels(1)
+        handle.setnchannels(CHANNELS)
         handle.setsampwidth(2)
         handle.setframerate(SAMPLE_RATE)
-        handle.writeframes(bytes(buffer))
+        handle.writeframes(buffer.tobytes())
 
     if not choices_path.exists():
         choices_path.write_text(json.dumps(

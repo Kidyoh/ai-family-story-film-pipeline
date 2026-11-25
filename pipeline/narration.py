@@ -48,9 +48,6 @@ def mock_length(text: str) -> float:
 
 
 def run(storyboard: dict, args, only) -> None:
-    voice_name = "narrator"
-    voice = storyboard["voices"][voice_name]
-    model = voice.get("model") or "gemini-2.5-flash-preview-tts"
     mode = common.provider_mode()
 
     narration_dir = out_path("audio", "narration", ".keep").parent
@@ -62,9 +59,17 @@ def run(storyboard: dict, args, only) -> None:
         script = shot.get("narration")
         if not script:
             continue
-        if only and shot["id"] not in only:
-            continue
         target = narration_dir / f"{shot['id']}.wav"
+        if only and shot["id"] not in only:
+            # Not asked for, but still part of the film: keep its existing take
+            # in the timing and the radio cut instead of dropping the line.
+            if target.exists() and target.stat().st_size and not args.dry_run:
+                timings[shot["id"]] = wav_duration(target)
+            continue
+        # Each line names its own voice, so a second narrator is a storyboard
+        # edit rather than a code change.
+        voice = storyboard["voices"][script.get("voice", "narrator")]
+        model = voice.get("model") or "gemini-2.5-flash-preview-tts"
         key = common.artifact_key("narration", shot["id"], script["text"], voice["voice_id"],
                                   voice["instruction"], model, mode)
 
@@ -93,6 +98,7 @@ def run(storyboard: dict, args, only) -> None:
                 raw, cost = providers.gemini_speech(
                     text=script["text"], voice_id=voice["voice_id"],
                     instruction=voice["instruction"], model=model,
+                    language=storyboard["meta"].get("language", "am"),
                 )
                 raw_path = narration_dir / f"{shot['id']}.raw"
                 raw_path.write_bytes(raw)
